@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 [package]
 name = "trafficlights-server"
-description = "Axum server for trafficlights-webapp: embedded single-page app, health check and (later) WebSockets"
+description = "Axum server for trafficlights-webapp: embedded single-page app, WebSocket lobby and sessions, and streamed statistics logs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,11 +16,18 @@ path = "src/main.rs"
 [dependencies]
 axum.workspace = true
 mime_guess.workspace = true
+rand.workspace = true
 rust-embed.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+trafficlights-proto = { path = "../proto" }
+uuid.workspace = true
 
 [dev-dependencies]
 tower.workspace = true

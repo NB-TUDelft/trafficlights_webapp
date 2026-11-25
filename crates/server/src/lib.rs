@@ -1,21 +1,46 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #![forbid(unsafe_code)]
-//! HTTP side of trafficlights-webapp.
+//! The trafficlights-webapp server, as described in "Architecture and
+//! design" in the knowledge base:
 //!
-//! Serves the single-page app embedded from `web/dist` and `GET /api/health`.
-//! The WebSocket endpoints, session registry and statistics logging described
-//! in "Architecture and design" are added on top of [`build_router`].
+//! - `GET /api/health` for the container health check;
+//! - `GET /api/sessions/{id}/log`, the creator-authorized streaming
+//!   download of a session's statistics `.jsonl` file;
+//! - `WS /ws/lobby` and `WS /ws/sessions/{id}` (see [`ws`]), backed by the
+//!   in-memory session registry in [`AppState`];
+//! - the single-page app embedded from `web/dist` for every other `GET`.
+//!
+//! [`build_router_with_state`] wires these to one [`AppState`];
+//! [`AppState::shutdown`] ends every session cleanly when the server stops.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+use std::sync::Arc;
 use std::time::Duration;
 
-use axum::http::{header, StatusCode, Uri};
+use axum::body::Body;
+use axum::extract::{Path, State};
+use axum::http::{header, HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use rust_embed::RustEmbed;
 use serde_json::json;
+use tokio_util::io::ReaderStream;
+
+mod board;
+mod client;
+pub mod config;
+mod log;
+mod session;
+mod state;
+pub mod ws;
+
+pub use config::{ConfigError, ServerConfig};
+pub use state::AppState;
+
+/// Read-buffer size for streaming a statistics log download.
+const LOG_STREAM_CHUNK_BYTES: usize = 16 * 1024;
 
 /// The built frontend, baked into the binary in release builds (and read from
 /// disk in debug builds). `build.rs` guarantees the folder exists.
@@ -29,9 +54,14 @@ pub const SOURCE_URL: &str = env!("CARGO_PKG_REPOSITORY");
 /// The project's license, for `--version` and the AGPL Section 13 notice.
 pub const LICENSE: &str = env!("CARGO_PKG_LICENSE");
 
-/// The address the server binds to: `BIND`, defaulting to `127.0.0.1:3000`.
+/// The address the server binds to: `BIND`, defaulting to `127.0.0.1:3000`
+/// when unset or blank (the same rule as [`ServerConfig::from_env`]).
 pub fn bind_address() -> String {
-    std::env::var("BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string())
+    std::env::var("BIND")
+        .ok()
+        .map(|bind| bind.trim().to_string())
+        .filter(|bind| !bind.is_empty())
+        .unwrap_or_else(|| config::DEFAULT_BIND.to_string())
 }
 
 /// The commit this binary was built from, when the image build passes it in
@@ -57,29 +87,122 @@ fn format_version(version: &str, commit: Option<&str>) -> String {
     format!("trafficlights-webapp {stamp}\nLicense: {LICENSE}\nSource: {SOURCE_URL}")
 }
 
-/// The application router: `GET /api/health` plus the embedded single-page
-/// app for every other `GET`.
+/// The application router with a default configuration and fresh state;
+/// see [`build_router_with_state`].
 pub fn build_router() -> Router {
+    build_router_with_state(Arc::new(AppState::new(ServerConfig::default())))
+}
+
+/// The application router over `state`: `GET /api/health`,
+/// `GET /api/sessions/{id}/log`, `WS /ws/lobby`, `WS /ws/sessions/{id}`,
+/// plus the embedded single-page app for every other `GET`.
+pub fn build_router_with_state(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/sessions/{id}/log", get(session_log))
+        .route("/ws/lobby", get(ws::lobby))
+        .route("/ws/sessions/{id}", get(ws::session))
         .fallback_service(get(static_fallback))
+        .with_state(state)
 }
 
 async fn health() -> Json<serde_json::Value> {
     Json(json!({ "status": "ok" }))
 }
 
+/// A JSON error response: `{"error": {"code": ..., "message": ...}}`.
+pub(crate) fn api_error(status: StatusCode, code: &str, message: &str) -> Response {
+    (
+        status,
+        Json(json!({ "error": { "code": code, "message": message } })),
+    )
+        .into_response()
+}
+
+/// The credentials of an `Authorization: Bearer <token>` header.
+fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, token) = value.trim().split_once(' ')?;
+    scheme
+        .eq_ignore_ascii_case("bearer")
+        .then_some(token.trim())
+}
+
+/// `GET /api/sessions/{id}/log`: stream a live or recently ended session's
+/// statistics `.jsonl` file to its creator.
+///
+/// The ID must look like a session ID, and the file path always comes from
+/// the registry, never from the request, so no request can reach another
+/// file. Unknown or expired sessions are `404`; a missing or wrong
+/// `Authorization: Bearer <creator_token>` is `401` (compared in constant
+/// time). The file is streamed in fixed-size chunks, so a download costs the
+/// same small amount of memory however long the class ran (R15).
+async fn session_log(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let not_found = || api_error(StatusCode::NOT_FOUND, "not_found", "Session log not found.");
+    if !ws::valid_session_id(&id) {
+        return not_found();
+    }
+    let Some((token, path)) = state.log_access(&id) else {
+        return not_found();
+    };
+    if !bearer_token(&headers).is_some_and(|provided| token.matches(provided)) {
+        let mut response = api_error(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "The session's creator token is required.",
+        );
+        response.headers_mut().insert(
+            header::WWW_AUTHENTICATE,
+            header::HeaderValue::from_static("Bearer"),
+        );
+        return response;
+    }
+    let file = match tokio::fs::File::open(&path).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return not_found(),
+        Err(error) => {
+            tracing::warn!(session_id = %id, %error, "cannot open a session log");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "The session log could not be read.",
+            );
+        }
+    };
+    let body = Body::from_stream(ReaderStream::with_capacity(file, LOG_STREAM_CHUNK_BYTES));
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                "application/x-ndjson; charset=utf-8".to_string(),
+            ),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"trafficlights-{id}.jsonl\""),
+            ),
+            (header::CACHE_CONTROL, "no-store".to_string()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+        ],
+        body,
+    )
+        .into_response()
+}
+
 /// Embedded files by exact path; any path without a file extension is a
-/// client-side route and gets `index.html`. Unknown `/api/...` paths and
-/// missing files are real 404s, so a stale asset never turns into HTML.
+/// client-side route and gets `index.html`. Unknown `/api/...` and `/ws/...`
+/// paths and missing files are real 404s, so a stale asset never turns into
+/// HTML.
 async fn static_fallback(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
-    if path == "api" || path.starts_with("api/") {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": { "code": "not_found", "message": "not found" } })),
-        )
-            .into_response();
+    let reserved = ["api", "ws"]
+        .iter()
+        .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")));
+    if reserved {
+        return api_error(StatusCode::NOT_FOUND, "not_found", "not found");
     }
     if let Some(response) = embedded(path) {
         return response;
@@ -156,7 +279,26 @@ pub fn healthcheck(bind: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{bind_port, content_type, format_version, has_extension, LICENSE, SOURCE_URL};
+    use axum::http::{header, HeaderMap, HeaderValue};
+
+    use super::{
+        bearer_token, bind_port, content_type, format_version, has_extension, LICENSE, SOURCE_URL,
+    };
+
+    fn authorization(value: &'static str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, HeaderValue::from_static(value));
+        headers
+    }
+
+    #[test]
+    fn bearer_tokens_are_read_from_the_authorization_header() {
+        assert_eq!(bearer_token(&authorization("Bearer abc")), Some("abc"));
+        assert_eq!(bearer_token(&authorization("bearer  abc ")), Some("abc"));
+        assert_eq!(bearer_token(&authorization("Basic abc")), None);
+        assert_eq!(bearer_token(&authorization("Bearer")), None);
+        assert_eq!(bearer_token(&HeaderMap::new()), None);
+    }
 
     #[test]
     fn version_names_the_license_and_the_source() {
