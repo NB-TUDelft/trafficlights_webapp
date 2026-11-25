@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #![forbid(unsafe_code)]
 //! The `trafficlights-webapp` binary: `--version`, `--healthcheck`, argument
-//! errors and, on Unix, a clean exit on SIGTERM (Docker's stop signal).
+//! and configuration errors and, on Unix, a clean exit on SIGTERM (Docker's
+//! stop signal).
 
 use std::process::{Command, Output, Stdio};
 
@@ -47,6 +48,21 @@ fn unknown_arguments_are_a_usage_error() {
     let text = String::from_utf8(output.stderr).expect("utf-8");
     assert!(text.contains("unknown argument: --bogus"), "{text}");
     assert!(text.contains("usage: trafficlights-webapp"), "{text}");
+}
+
+#[test]
+fn invalid_configuration_stops_before_serving() {
+    for (name, value) in [
+        ("MAX_SESSIONS", "0"),
+        ("DISCONNECT_GRACE_SECONDS", "0"),
+        ("LOG_RETENTION_SECONDS", "soon"),
+    ] {
+        let output = run(binary().env("BIND", unused_bind()).env(name, value));
+        assert_eq!(output.status.code(), Some(2), "{name}={value}");
+        let text = String::from_utf8(output.stderr).expect("utf-8");
+        assert!(text.contains("invalid configuration"), "{text}");
+        assert!(text.contains(name), "{text}");
+    }
 }
 
 #[cfg(unix)]
