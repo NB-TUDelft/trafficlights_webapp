@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# What stays out of the Docker build context. The image build reads only the
+# Cargo files, rust-toolchain.toml, crates/ and the web/ sources (package.json,
+# nub.lock, public/, configs); everything below is local state, generated
+# output that the image rebuilds itself, or something that must never leave
+# this machine. Patterns are relative to the context root, so nested copies
+# need the `**/` prefix.
+
+# Version control, agent worktrees and local tool state.
+.git
+.tw-wt
+.claude
+
+# Build output and dependencies, rebuilt inside the image. web/src/wasm is the
+# generated wasm-bindgen glue: the `wasm` stage produces it, so a stale local
+# copy must never shadow it.
+target
+web/node_modules
+web/dist
+web/src/wasm
+web/coverage
+coverage
+**/node_modules
+**/*.tsbuildinfo
+.scannerwork
+
+# Regenerable tool output and reference-only material.
+graphify-out
+old
+
+# Local secrets and logs.
+.env
+.env.*
+**/*.log
+
+# Editor and operating-system leftovers.
+.vscode
+.idea
+.DS_Store
+
+# Deployment files are not build inputs (and Actions never reads them from the
+# context): the image does not need to be rebuilt when only they change.
+.github
+compose.dev.yaml
+compose.prod.yaml
