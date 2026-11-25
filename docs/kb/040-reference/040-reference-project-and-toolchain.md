@@ -88,8 +88,8 @@ Checked on this host before choosing any toolchain:
 
 | Category | Installed | Not installed |
 | :--- | :--- | :--- |
-| Rust | `rustc 1.98.1`, `cargo 1.98.1` (targets: Linux/macOS/Windows native + musl) | `wasm32-unknown-unknown` target, `wasm-pack`, `wasm-bindgen`, `wasm-opt`, `trunk` |
+| Rust | `rustc 1.98.1`, `cargo 1.98.1`, `~/.cargo/bin/wasm-bindgen` (`0.2.129`), `cargo-llvm-cov` | `wasm32-unknown-unknown` target (installed via `rustup target add` in Slice 1), `wasm-pack`, `wasm-opt`, `trunk` |
 | JavaScript / Node | `node v26.13.1`, `nub v0.11.2`, `pnpm`, `npm`, `bun` | — |
-| Containers | `docker`, `podman` | — |
+| Containers / Browser | `docker`, `podman`, `/usr/bin/brave` | `google-chrome`, `chromium` |
 | Graphics / SVG | `inkscape`, `gimp`, `blender` | `krita` |
-| KB / Graph | `graphify` (`~/.local/bin/graphify`) | — |
+| KB / Graph / Agents | `graphify`, `muse` (`muse-wonder-full-1.0`), `claude` (`2.1.331`), `~/.tokeneconomizer/bin/te` | — |
