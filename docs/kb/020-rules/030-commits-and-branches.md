@@ -5,7 +5,8 @@ summary: >-
   `https://github.com/NB-TUDelft/trafficlights_webapp` (renamed from
   `NB-TUDelft/classroom_trafficlights`, which the maintainer will force-push
   to); linear history on `main` with short imperative GPG-signed commits (no
-  type prefix, no trailer, matching `trafficlights_firmware`); signing is never
+  type prefix; optional `Co-Authored-By:` trailer for multi-agent coworker
+  credit); signing is never
   bypassed; agents do not push or add a remote unasked.
 always_read: true
 ---
@@ -31,6 +32,7 @@ always_read: true
   run `make gate` first, and name the checks run in the commit message. Do not
   push or add a remote unless asked.
 - **Branches and message style (confirmed `2026-11-25`).** Keep linear history
-  on `main` with short imperative commit subjects (no type prefix and no
-  trailer), matching `trafficlights_firmware`. Remote setup stays the
-  maintainer's to ask for.
+  on `main` with short imperative commit subjects (no type prefix), matching
+  `trafficlights_firmware`. Include a `Co-Authored-By:` trailer when crediting
+  an internal or external coworker on a multi-agent slice (see Multi-agent
+  workflow). Remote setup stays the maintainer's to ask for.

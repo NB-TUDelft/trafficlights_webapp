@@ -1,10 +1,10 @@
 ---
 summary: >-
-  Standing rules: run `make gate` before committing (currently the
-  knowledge-base check; type checks, linting and tests will be wired in once
-  the stack is chosen); fix touched-file issues; never weaken a check; American
-  spelling; small commits; record the checks run and any known gaps; keep this
-  knowledge base current while working.
+  Standing rules: run `make gate` before committing (KB check, WASM build,
+  Biome CI + strict lint + TypeScript + Vitest + Vite build, Cargo fmt +
+  clippy `-D warnings` + workspace tests); fix touched-file issues; never
+  weaken a check; American spelling; small commits; record the checks run and
+  any known gaps; keep this knowledge base current while working.
 always_read: true
 ---
 
@@ -12,11 +12,11 @@ always_read: true
 
 - Keep `README.md` as the entry point and link deeper docs from it.
 - Run the gate on the finished working tree before committing: `make gate`.
-  At initialization (`2026-11-25`), `make gate` runs `scripts/kb.sh check`,
-  which fails while the knowledge base's index is stale or a section breaks the
-  layout rules. Once Python and/or frontend tooling, type checks, linters and
-  automated tests are settled (Work order), wire them into `make gate` and
-  update this section.
+  `make gate` runs `scripts/kb.sh check`, builds the browser WASM module
+  (`scripts/build-wasm.sh`), runs the frontend checks (`nub --cwd web run ci`,
+  `lint:strict`, `test`, `build`), and runs the Rust workspace checks
+  (`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+  warnings`, `cargo test --workspace`).
 - When changing serial-handling code or browser UI, record what was tested
   (unit/integration tests, browser checks, or a real micro:bit receiver over
   USB serial) and what was not tested. Keep in mind that only one program can
