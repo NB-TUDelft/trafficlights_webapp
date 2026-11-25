@@ -173,7 +173,7 @@ function parseTableUpdate(rec: JsonRecord): SessionServerMsg | null {
     color,
     counts,
   };
-  const redSince = numField(rec, "red_since_ms");
+  const redSince = intField(rec, "red_since_ms");
   if (redSince !== null) {
     msg.red_since_ms = redSince;
   }

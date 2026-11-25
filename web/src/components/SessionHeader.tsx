@@ -16,12 +16,7 @@ export function SessionHeader({ name, counts, statusLabel }: SessionHeaderProps)
   return (
     <header className="session-header">
       <Link to="/" className="lobby-link">
-        <img
-          src="/icon.svg"
-          width={HEADER_ICON_SIZE}
-          height={HEADER_ICON_SIZE}
-          alt="Classroom Traffic Lights icon"
-        />
+        <img src="/icon.svg" width={HEADER_ICON_SIZE} height={HEADER_ICON_SIZE} alt="" />
         <span>Lobby</span>
       </Link>
       <h1>{name.length > 0 ? name : "Session"}</h1>
@@ -37,7 +32,9 @@ export function SessionHeader({ name, counts, statusLabel }: SessionHeaderProps)
         </span>
         <strong>{counts.red}</strong>
       </div>
-      <span className="status-chip">{statusLabel}</span>
+      <span className="status-chip" aria-live="polite">
+        {statusLabel}
+      </span>
     </header>
   );
 }

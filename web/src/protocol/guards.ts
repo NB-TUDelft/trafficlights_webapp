@@ -15,6 +15,7 @@ import type {
   TableRange,
   UnlistedTable,
 } from "./types";
+import { DEFAULT_SOURCE_URL } from "./types";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -149,7 +150,7 @@ export function parseTableEntry(value: unknown): TableEntry | null {
     return null;
   }
   const entry: TableEntry = { table, color };
-  const redSince = numField(rec, "red_since_ms");
+  const redSince = intField(rec, "red_since_ms");
   if (redSince !== null) {
     entry.red_since_ms = redSince;
   }
@@ -163,7 +164,7 @@ export function parseUnlistedTable(value: unknown): UnlistedTable | null {
   }
   const table = intField(rec, "table");
   const color = colorField(rec, "color");
-  const lastSeen = numField(rec, "last_seen_ms");
+  const lastSeen = intField(rec, "last_seen_ms");
   if (table === null || color === null || lastSeen === null) {
     return null;
   }
@@ -207,7 +208,7 @@ export function parseServerBuildInfo(value: unknown): ServerBuildInfo | null {
   const info: ServerBuildInfo = {
     version,
     license,
-    source_url: sourceUrl,
+    source_url: sourceUrl.startsWith("https://") ? sourceUrl : DEFAULT_SOURCE_URL,
     proto_version: protoVersion,
     pin_required: pinRequired,
   };
@@ -229,7 +230,7 @@ export function parseSessionSummary(value: unknown): SessionSummary | null {
   const counts = parseColorCounts(rec.counts);
   const receiverConnected = boolField(rec, "receiver_connected");
   const viewerCount = intField(rec, "viewer_count");
-  const createdAt = numField(rec, "created_at_ms");
+  const createdAt = intField(rec, "created_at_ms");
   if (
     sessionId === null ||
     name === null ||

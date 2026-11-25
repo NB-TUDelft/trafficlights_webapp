@@ -51,6 +51,7 @@ export interface WasmBridgeLike {
 }
 
 export interface WasmSerialApi {
+  proto_version: () => number;
   microbit_usb_vid: () => number;
   serial_baud_rate: () => number;
   format_wake_up: () => string;
@@ -121,6 +122,7 @@ export interface SerialBridgeCallbacks {
 export interface SerialBridgeOptions {
   wasmApi?: WasmSerialApi | Promise<WasmSerialApi>;
   probeTimeoutMs?: number;
+  probeRetryMs?: number;
   wakeDelayMs?: number;
   paceMs?: number;
 }

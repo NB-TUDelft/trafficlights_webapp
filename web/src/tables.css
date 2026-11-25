@@ -66,6 +66,11 @@ button.table-action::after {
   border-radius: 18px;
 }
 
+.table-card button:focus-visible {
+  outline: 3px solid rgb(3 7 18);
+  outline-offset: 2px;
+}
+
 button.table-action:hover:not(:disabled) {
   opacity: 1;
   transform: none;

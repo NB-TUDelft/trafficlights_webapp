@@ -123,7 +123,7 @@ export function QuickActionsCard(props: QuickActionsProps) {
       <button type="button" disabled={!props.receiverConnected} onClick={props.onResetAll}>
         Reset All To Green
       </button>
-      <button type="button" onClick={props.onToggleBeeps}>
+      <button type="button" aria-pressed={props.beepsEnabled} onClick={props.onToggleBeeps}>
         {props.beepsEnabled ? "Beeps On" : "Beeps Off"}
       </button>
       <p className="muted-text">{props.viewerCount} viewers connected</p>
@@ -141,7 +141,7 @@ export function AudioInfoCard(props: AudioInfoProps) {
   return (
     <article className="control-card">
       <h2 className="card-label">Audio &amp; Session Info</h2>
-      <button type="button" onClick={props.onToggleBeeps}>
+      <button type="button" aria-pressed={props.beepsEnabled} onClick={props.onToggleBeeps}>
         {props.beepsEnabled ? "Beeps On" : "Beeps Off"}
       </button>
       <p className="muted-text">{props.viewerCount} viewers connected</p>

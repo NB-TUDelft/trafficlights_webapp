@@ -42,7 +42,7 @@ export function UnlistedBanner({ tables }: { tables: readonly UnlistedTable[] })
     return null;
   }
   return (
-    <div className="banner banner-info">
+    <div className="banner banner-info" role="status">
       <strong>Unlisted tables heard</strong>
       <ul>
         {tables.map((entry) => (

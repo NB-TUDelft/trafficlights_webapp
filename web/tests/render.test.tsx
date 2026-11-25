@@ -210,6 +210,48 @@ describe("session view role split", () => {
   });
 });
 
+describe("protocol mismatch and accessibility attributes", () => {
+  it("warns on the homepage when the server protocol differs", () => {
+    const html = render(
+      <HomeView
+        state={{
+          sessions: [],
+          serverInfo: { ...serverInfo, proto_version: 99 },
+          created: null,
+          error: null,
+        }}
+        status="open"
+        ownSessionIds={new Set()}
+      />,
+    );
+    expect(html).toContain("out of date for the server");
+    expect(html).toContain("reload the page");
+    expect(html).toContain('alt=""');
+  });
+
+  it("warns in the session view and exposes live and pressed states", () => {
+    const state = baseState({
+      isCreator: true,
+      serverInfo: { ...serverInfo, proto_version: 99 },
+      unlistedTables: [{ table: 0, color: "red", last_seen_ms: 99 }],
+    });
+    const html = render(<SessionView {...viewProps(state)} />);
+    expect(html).toContain("out of date for the server");
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain('alt=""');
+  });
+
+  it("shows aria-pressed false when beeps are off for viewers", () => {
+    const html = render(
+      <SessionView {...{ ...viewProps(baseState({ isCreator: false })), beepsEnabled: false }} />,
+    );
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain("Beeps Off");
+  });
+});
+
 describe("footer rendering", () => {
   it("renders version, short commit, and the AGPL source link", () => {
     const html = render(<Footer serverInfo={serverInfo} />);

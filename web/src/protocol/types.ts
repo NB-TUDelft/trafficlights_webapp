@@ -14,6 +14,8 @@ export const MAX_STATION_ID = 9999;
 export const MAX_SESSION_NAME_CHARS = 80;
 export const DEFAULT_RANGE_START = 1;
 export const DEFAULT_RANGE_END = 60;
+export const EXPECTED_PROTO_VERSION = 1;
+export const DEFAULT_SOURCE_URL = "https://github.com/NB-TUDelft/trafficlights_webapp";
 
 export function nextCycleColor(color: Color): Color {
   if (color === COLOR_GREEN) {

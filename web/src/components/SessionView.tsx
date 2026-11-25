@@ -16,6 +16,7 @@ import type { SocketStatus } from "@/lib/socket";
 import { computeLongestOnRed } from "@/lib/time";
 import type { SessionState } from "@/protocol/reducers";
 import type { Color, FirmwareInfo } from "@/protocol/types";
+import { EXPECTED_PROTO_VERSION } from "@/protocol/types";
 
 export function sessionStatusLabel(
   socketStatus: SocketStatus,
@@ -128,6 +129,11 @@ export function SessionView(props: SessionViewProps) {
       {displayError === null ? null : (
         <ErrorBanner message={displayError} onDismiss={props.onDismissError} />
       )}
+      {state.serverInfo !== null && state.serverInfo.proto_version !== EXPECTED_PROTO_VERSION ? (
+        <div className="banner banner-warning" role="alert">
+          This page is out of date for the server. Please reload the page.
+        </div>
+      ) : null}
       {state.ended === null ? null : (
         <EndedBanner
           ended={state.ended}

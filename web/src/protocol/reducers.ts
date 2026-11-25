@@ -185,6 +185,14 @@ export function sessionReducer(state: SessionState, msg: SessionServerMsg): Sess
     return { ...state, ended: { reason: msg.reason, logAvailable: msg.log_available } };
   }
   if (msg.type === "error") {
+    if (msg.code === "superseded") {
+      return {
+        ...state,
+        isCreator: false,
+        unlistedTables: [],
+        error: { code: msg.code, message: "Session controls moved to another tab." },
+      };
+    }
     return { ...state, error: { code: msg.code, message: msg.message } };
   }
   return state;

@@ -23,6 +23,7 @@ import type {
 
 export const WAKE_DELAY_MS = 50;
 export const PROBE_TIMEOUT_MS = 1000;
+export const PROBE_RETRIES = 2;
 export const WRITE_PACE_MS = 25;
 
 function preventUnload(event: BeforeUnloadEvent): void {
@@ -43,6 +44,8 @@ export class CreatorSerialBridge {
   private lastFirmware: FirmwareInfo | null = null;
   private firmwareResolved = false;
   private probeTimer: ReturnType<typeof setTimeout> | null = null;
+  private probeRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private probeRetriesLeft = 0;
   private wakeLock: WakeLockSentinelLike | null = null;
   private writeChain: Promise<void> = Promise.resolve();
   private lastWriteAt = 0;
@@ -76,23 +79,29 @@ export class CreatorSerialBridge {
     if (this.connected) {
       return;
     }
-    this.api = await (this.options.wasmApi ?? loadWasmSerialApi());
-    this.bridge = this.api.createBridge();
-    this.port = port;
-    await port.open({ baudRate: this.api.serial_baud_rate() });
-    this.acquireStreams(port);
-    this.connected = true;
-    this.portLabel = describePort(port);
-    this.lastFirmware = null;
-    this.firmwareResolved = false;
-    this.wakeLock = await acquireWakeLock();
-    this.addUnloadWarning();
-    this.callbacks.onStatus({ connected: true, portLabel: this.portLabel, firmware: null });
-    this.readLoop().catch(() => undefined);
-    await this.writeText(this.api.format_wake_up());
-    await delay(this.options.wakeDelayMs ?? WAKE_DELAY_MS);
-    await this.writeText(this.api.format_probe_firmware());
-    this.armProbeTimeout();
+    try {
+      this.api = await (this.options.wasmApi ?? loadWasmSerialApi());
+      this.bridge = this.api.createBridge();
+      this.port = port;
+      await port.open({ baudRate: this.api.serial_baud_rate() });
+      this.acquireStreams(port);
+      this.connected = true;
+      this.portLabel = describePort(port);
+      this.lastFirmware = null;
+      this.firmwareResolved = false;
+      this.probeRetriesLeft = PROBE_RETRIES;
+      this.wakeLock = await acquireWakeLock();
+      globalThis.window?.addEventListener("beforeunload", this.beforeUnloadHandler);
+      this.callbacks.onStatus({ connected: true, portLabel: this.portLabel, firmware: null });
+      this.readLoop().catch(() => undefined);
+      await this.writeText(this.api.format_wake_up());
+      await delay(this.options.wakeDelayMs ?? WAKE_DELAY_MS);
+      await this.writeText(this.api.format_probe_firmware());
+      this.armProbeTimeout();
+    } catch (error) {
+      await this.disconnect();
+      throw error;
+    }
   }
 
   enqueueCommand(command: SerialCommand): void {
@@ -111,7 +120,7 @@ export class CreatorSerialBridge {
     }
     this.connected = false;
     this.clearProbeTimer();
-    this.removeUnloadWarning();
+    globalThis.window?.removeEventListener("beforeunload", this.beforeUnloadHandler);
     const { wakeLock, reader, writer, port, bridge } = this;
     this.wakeLock = null;
     this.reader = null;
@@ -138,23 +147,46 @@ export class CreatorSerialBridge {
   private armProbeTimeout(): void {
     const timeoutMs = this.options.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
     this.probeTimer = setTimeout(() => {
+      this.probeTimer = null;
       if (!this.connected || this.firmwareResolved) {
         return;
       }
-      this.firmwareResolved = true;
+      // Show the legacy fallback at once, but keep probing: a freshly
+      // powered board may still be scrolling its ID and answer late.
       this.lastFirmware = { kind: "legacy" };
       this.callbacks.onStatus({
         connected: true,
         portLabel: this.portLabel,
         firmware: this.lastFirmware,
       });
+      this.scheduleProbeRetry();
     }, timeoutMs);
+  }
+
+  private scheduleProbeRetry(): void {
+    if (this.probeRetriesLeft <= 0) {
+      return;
+    }
+    const retryMs = this.options.probeRetryMs ?? PROBE_TIMEOUT_MS;
+    this.probeRetryTimer = setTimeout(() => {
+      this.probeRetryTimer = null;
+      if (!this.connected || this.firmwareResolved || this.api === null) {
+        return;
+      }
+      this.probeRetriesLeft -= 1;
+      this.writeText(this.api.format_probe_firmware()).catch(() => undefined);
+      this.scheduleProbeRetry();
+    }, retryMs);
   }
 
   private clearProbeTimer(): void {
     if (this.probeTimer !== null) {
       clearTimeout(this.probeTimer);
       this.probeTimer = null;
+    }
+    if (this.probeRetryTimer !== null) {
+      clearTimeout(this.probeRetryTimer);
+      this.probeRetryTimer = null;
     }
   }
 
@@ -255,14 +287,6 @@ export class CreatorSerialBridge {
     } catch (error) {
       this.reportError(error);
     }
-  }
-
-  private addUnloadWarning(): void {
-    globalThis.window?.addEventListener("beforeunload", this.beforeUnloadHandler);
-  }
-
-  private removeUnloadWarning(): void {
-    globalThis.window?.removeEventListener("beforeunload", this.beforeUnloadHandler);
   }
 
   private reportError(error: unknown): void {

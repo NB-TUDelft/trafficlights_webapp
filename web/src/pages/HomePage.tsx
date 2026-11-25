@@ -8,6 +8,7 @@ import { ReconnectingSocket, type SocketStatus, websocketUrl } from "@/lib/socke
 import { parseLobbyServerMsg } from "@/protocol/parse";
 import { initialLobbyState, type LobbyState, lobbyReducer } from "@/protocol/reducers";
 import { loadCreatorTokens } from "@/protocol/storage";
+import { EXPECTED_PROTO_VERSION } from "@/protocol/types";
 
 const ICON_SIZE = 64;
 
@@ -34,12 +35,7 @@ export function HomeView({ state, status, ownSessionIds }: HomeViewProps) {
   return (
     <main className="page">
       <header className="hero">
-        <img
-          src="/icon.svg"
-          width={ICON_SIZE}
-          height={ICON_SIZE}
-          alt="Classroom Traffic Lights icon"
-        />
+        <img src="/icon.svg" width={ICON_SIZE} height={ICON_SIZE} alt="" />
         <h1>Classroom Traffic Lights</h1>
         <p>
           Teachers stream a micro:bit USB receiver from their browser and share live table status
@@ -57,6 +53,11 @@ export function HomeView({ state, status, ownSessionIds }: HomeViewProps) {
           {state.error.message}
         </div>
       )}
+      {state.serverInfo !== null && state.serverInfo.proto_version !== EXPECTED_PROTO_VERSION ? (
+        <div className="banner banner-warning" role="alert">
+          This page is out of date for the server. Please reload the page.
+        </div>
+      ) : null}
       <section aria-label="Active sessions">
         <h2>Active sessions</h2>
         {state.sessions.length === 0 ? (

@@ -55,7 +55,7 @@ export function useSessionSocket(args: SocketHookArgs): void {
   }, [sessionId, dispatch, setSocketStatus, socketRef, bridgeRef, stopReconnectRef]);
 }
 
-function handleServerData(
+export function handleServerData(
   data: string,
   dispatch: SocketHookArgs["dispatch"],
   bridgeRef: SocketHookArgs["bridgeRef"],
@@ -73,13 +73,11 @@ function handleServerData(
     bridgeRef.current.resetDedup();
     bridgeRef.current.resendStatus();
   }
-  if (msg.type === "snapshot" && bridgeRef.current?.isConnected()) {
-    bridgeRef.current.resetDedup();
-  }
-  if (msg.type === "session_ended") {
+  if (msg.type === "session_ended" || (msg.type === "error" && msg.code === "superseded")) {
     stopReconnectRef.current = true;
+    bridgeRef.current?.disconnect().catch(() => undefined);
   }
-  if (msg.type === "error" && (msg.code === "session_not_found" || msg.code === "superseded")) {
+  if (msg.type === "error" && msg.code === "session_not_found") {
     stopReconnectRef.current = true;
   }
   dispatch(msg);

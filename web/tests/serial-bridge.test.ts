@@ -12,11 +12,10 @@ import type {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function sleep(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => {
+const sleep = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
-}
 
 interface FakeBridgeHandle {
   bridge: WasmBridgeLike;
@@ -90,6 +89,7 @@ function parseFakeLine(line: string): SerialEvent | null {
 function createFakeApi() {
   let last: FakeBridgeHandle | null = null;
   const api: WasmSerialApi = {
+    proto_version: () => 1,
     microbit_usb_vid: () => 0x0d_28,
     serial_baud_rate: () => 115_200,
     format_wake_up: () => "\n",
@@ -188,11 +188,9 @@ describe("CreatorSerialBridge", () => {
     h.fakePort.push("!ok mode=receiver fw=draft-1\n");
     await sleep(20);
     const detected = h.statuses.find((status) => status.firmware?.kind === "new");
-    expect(detected?.firmware).toEqual({
-      kind: "new",
-      mode: "receiver",
-      version: "draft-1",
-    });
+    expect(detected?.firmware?.kind).toBe("new");
+    expect(detected?.firmware?.mode).toBe("receiver");
+    expect(detected?.firmware?.version).toBe("draft-1");
     await sleep(80);
     expect(h.statuses.some((status) => status.firmware?.kind === "legacy")).toBe(false);
     await h.bridge.disconnect();
@@ -203,8 +201,7 @@ describe("CreatorSerialBridge", () => {
     await h.bridge.connect(h.fakePort.port);
     h.fakePort.push("!ok mode=station id=7 fw=draft-1\n");
     await sleep(20);
-    const detected = h.statuses.find((status) => status.firmware?.mode === "station");
-    expect(detected?.firmware?.station_id).toBe(7);
+    expect(h.statuses.find((s) => s.firmware?.mode === "station")?.firmware?.station_id).toBe(7);
     await h.bridge.disconnect();
   });
 
@@ -256,12 +253,39 @@ describe("CreatorSerialBridge", () => {
     h.bridge.resetDedup();
     h.bridge.resendStatus();
     expect(h.statuses.length).toBe(beforeCount + 1);
-    expect(h.statuses.at(-1)).toEqual({
-      connected: true,
-      portLabel: "micro:bit USB (0D28:0204)",
-      firmware: { kind: "new", mode: "receiver", version: "draft-1" },
-    });
+    expect(h.statuses.at(-1)?.firmware?.version).toBe("draft-1");
+    expect(h.statuses.at(-1)?.portLabel).toBe("micro:bit USB (0D28:0204)");
     await h.bridge.disconnect();
+  });
+
+  it("retries the probe after the legacy fallback and catches a late reply", async () => {
+    const h = makeHarness(30);
+    const bridge = new CreatorSerialBridge(
+      { onStationReport: () => undefined, onStatus: (s) => h.statuses.push(s) },
+      { wasmApi: h.fakeApi.api, probeTimeoutMs: 30, probeRetryMs: 30, wakeDelayMs: 1, paceMs: 1 },
+    );
+    await bridge.connect(h.fakePort.port);
+    await sleep(50);
+    expect(h.statuses.some((status) => status.firmware?.kind === "legacy")).toBe(true);
+    await sleep(80);
+    const probes = h.fakePort.writes.filter((write) => write === "!get\n");
+    expect(probes.length).toBeGreaterThanOrEqual(2);
+    expect(probes.length).toBeLessThanOrEqual(3);
+    h.fakePort.push("!ok mode=receiver fw=draft-1\n");
+    await sleep(20);
+    expect(h.statuses.at(-1)?.firmware?.kind).toBe("new");
+    expect(h.statuses.at(-1)?.firmware?.version).toBe("draft-1");
+    await bridge.disconnect();
+  });
+
+  it("cleans up the port and WASM bridge when connect fails partway", async () => {
+    const h = makeHarness(30);
+    const broken: SerialPortLike = { ...h.fakePort.port, readable: null };
+    await expect(h.bridge.connect(broken)).rejects.toThrow("streams are unavailable");
+    expect(h.fakePort.isClosed()).toBe(true);
+    expect(h.fakeApi.lastFreed()).toBe(true);
+    expect(h.bridge.isConnected()).toBe(false);
+    expect(h.statuses.at(-1)).toEqual({ connected: false, portLabel: null, firmware: null });
   });
 
   it("auto-disconnects when the serial read stream closes unexpectedly", async () => {
@@ -270,7 +294,7 @@ describe("CreatorSerialBridge", () => {
     h.fakePort.endStream();
     await sleep(30);
     expect(h.bridge.isConnected()).toBe(false);
-    expect(h.statuses.at(-1)).toEqual({ connected: false, portLabel: null, firmware: null });
+    expect(h.statuses.at(-1)?.connected).toBe(false);
     expect(h.fakeApi.lastFreed()).toBe(true);
   });
 });

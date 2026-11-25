@@ -20,7 +20,8 @@ function shortCommit(serverInfo: ServerBuildInfo | null | undefined): string | n
 export function Footer({ serverInfo }: { serverInfo?: ServerBuildInfo | null }) {
   const version = serverInfo?.version ?? FALLBACK_VERSION;
   const commit = shortCommit(serverInfo);
-  const sourceUrl = serverInfo?.source_url ?? SOURCE_URL;
+  const rawSourceUrl = serverInfo?.source_url ?? SOURCE_URL;
+  const sourceUrl = rawSourceUrl.startsWith("https://") ? rawSourceUrl : SOURCE_URL;
   return (
     <footer className="app-footer">
       <span>

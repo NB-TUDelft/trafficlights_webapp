@@ -18,6 +18,7 @@ async function loadRealWasm(): Promise<WasmSerialApi> {
   const mod = await import("@/wasm/trafficlights_wasm");
   await mod.default();
   return {
+    proto_version: () => mod.proto_version(),
     microbit_usb_vid: () => mod.microbit_usb_vid(),
     serial_baud_rate: () => mod.serial_baud_rate(),
     format_wake_up: () => mod.format_wake_up(),
@@ -46,7 +47,10 @@ function adaptBridge(inner: {
 }
 
 export function loadWasmSerialApi(): Promise<WasmSerialApi> {
-  wasmPromise ??= loadRealWasm();
+  wasmPromise ??= loadRealWasm().catch((error: unknown) => {
+    wasmPromise = null;
+    throw error;
+  });
   return wasmPromise;
 }
 
