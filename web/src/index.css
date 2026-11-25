@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 @import "tailwindcss";
+@import "./controls.css";
 @import "./lobby.css";
 @import "./navbar.css";
 @import "./tables.css";

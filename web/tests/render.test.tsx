@@ -55,13 +55,15 @@ function baseState(overrides: Partial<SessionState>): SessionState {
   };
 }
 
-function viewProps(state: SessionState): SessionViewProps {
+function viewProps(state: SessionState, overrides?: Partial<SessionViewProps>): SessionViewProps {
   return {
     state,
     socketStatus: "open",
     nowMs: 61_000,
     beepsEnabled: true,
     mutedTables: new Set([1]),
+    tapMode: state.tapMode,
+    tapModeLocked: state.tapModeLocked,
     transientError: null,
     serialConnected: true,
     serialFirmware: null,
@@ -74,9 +76,11 @@ function viewProps(state: SessionState): SessionViewProps {
     renameValue: "Studio 3B",
     confirmEnd: false,
     onDismissError: noop,
-    onCycleTable: noop,
+    onSetTable: noop,
     onToggleMute: noop,
     onToggleBeeps: noop,
+    onToggleTapMode: noop,
+    onToggleTapModeLock: noop,
     onConnectSerial: noop,
     onDisconnectSerial: noop,
     onShowAllChange: noop,
@@ -90,6 +94,7 @@ function viewProps(state: SessionState): SessionViewProps {
     onAskEnd: noop,
     onConfirmEnd: noop,
     onCancelEnd: noop,
+    ...overrides,
   };
 }
 
@@ -170,13 +175,27 @@ describe("session view role split", () => {
     expect(html).toContain("Longest On Red");
     expect(html).toContain("red-list-wrap");
     expect(html).not.toContain("control-grid-creator");
-    expect(html).toContain("Tap any table tile to cycle green");
+    expect(html).toContain("Cycle on tap");
+    expect(html).toContain("Tap resets to green");
+    expect(html).toContain("Activate to set green. Hold or right-click for all colors.");
+    expect(html).not.toContain("Lock tap mode");
     expect(html).not.toContain("Reset All To Green");
     expect(html).not.toContain("Table Range");
     expect(html).not.toContain("Serial Connection");
     expect(html).not.toContain("End session");
     expect(html).not.toContain("Download statistics");
     expect(html).not.toContain("Unlisted tables");
+  });
+
+  it("grays out the viewer tap-mode switch when locked by the host", () => {
+    const state = baseState({ isCreator: false, tapMode: "cycle", tapModeLocked: true });
+    const html = render(<SessionView {...viewProps(state)} />);
+    expect(html).toContain('id="viewer-tap-mode"');
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain("disabled");
+    expect(html).toContain("Locked by host");
+    expect(html).toContain("Activate to set orange.");
   });
 
   it("shows creator controls, station warning, unlisted Table 0, and mute labels", () => {
@@ -188,6 +207,8 @@ describe("session view role split", () => {
     const html = render(<SessionView {...viewProps(state)} />);
     expect(html).toContain("control-grid-creator");
     expect(html).toContain("session-nav-identity");
+    expect(html).toContain("Cycle on tap");
+    expect(html).toContain("Lock tap mode");
     expect(html).toContain("Reset All To Green");
     expect(html).toContain("Table Range");
     expect(html).toContain("Serial Connection");

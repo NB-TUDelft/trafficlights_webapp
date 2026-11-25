@@ -11,9 +11,10 @@ import type {
   SessionSummary,
   TableEntry,
   TableRange,
+  TapMode,
   UnlistedTable,
 } from "./types";
-import { DEFAULT_RANGE_END, DEFAULT_RANGE_START } from "./types";
+import { DEFAULT_RANGE_END, DEFAULT_RANGE_START, DEFAULT_TAP_MODE } from "./types";
 
 export interface CreatedSession {
   sessionId: string;
@@ -83,6 +84,8 @@ export interface SessionState {
   portLabel: string | null;
   firmware: FirmwareInfo | null;
   viewerCount: number;
+  tapMode: TapMode;
+  tapModeLocked: boolean;
   isCreator: boolean;
   unlistedTables: UnlistedTable[];
   serverNowMs: number | null;
@@ -103,6 +106,8 @@ export const initialSessionState: SessionState = {
   portLabel: null,
   firmware: null,
   viewerCount: 0,
+  tapMode: DEFAULT_TAP_MODE,
+  tapModeLocked: false,
   isCreator: false,
   unlistedTables: [],
   serverNowMs: null,
@@ -129,6 +134,8 @@ function fromSnapshot(state: SessionState, msg: SnapshotMsg): SessionState {
     portLabel: msg.port_label ?? null,
     firmware: msg.firmware ?? null,
     viewerCount: msg.viewer_count,
+    tapMode: msg.tap_mode ?? DEFAULT_TAP_MODE,
+    tapModeLocked: msg.tap_mode_locked ?? false,
     isCreator: msg.is_creator,
     unlistedTables: msg.unlisted_tables ?? [],
     serverNowMs: msg.server_now_ms,
@@ -176,7 +183,14 @@ export function sessionReducer(state: SessionState, msg: SessionServerMsg): Sess
     return applyReceiverStatus(state, msg);
   }
   if (msg.type === "session_meta") {
-    return { ...state, name: msg.name, range: msg.range, viewerCount: msg.viewer_count };
+    return {
+      ...state,
+      name: msg.name,
+      range: msg.range,
+      viewerCount: msg.viewer_count,
+      tapMode: msg.tap_mode ?? state.tapMode,
+      tapModeLocked: msg.tap_mode_locked ?? state.tapModeLocked,
+    };
   }
   if (msg.type === "unlisted_tables") {
     return { ...state, unlistedTables: msg.tables };

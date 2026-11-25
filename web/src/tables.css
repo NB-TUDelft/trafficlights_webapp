@@ -59,6 +59,12 @@ button.table-action {
   text-align: left;
 }
 
+@supports (user-select: none) {
+  button.table-action {
+    user-select: none;
+  }
+}
+
 button.table-action::after {
   content: "";
   position: absolute;

@@ -3,7 +3,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionState } from "@/protocol/reducers";
-import type { SessionClientMsg } from "@/protocol/types";
+import type { SessionClientMsg, TapMode } from "@/protocol/types";
+import { DEFAULT_TAP_MODE } from "@/protocol/types";
 import { CreatorSerialBridge } from "@/serial/bridge";
 import { takePendingSerialPort } from "@/serial/pending";
 import type { SerialPortLike, SerialStatusUpdate } from "@/serial/types";
@@ -11,6 +12,9 @@ import type { SerialPortLike, SerialStatusUpdate } from "@/serial/types";
 export function useSessionUiState(state: SessionState) {
   const [beepsEnabled, setBeepsEnabled] = useState(true);
   const [mutedTables, setMutedTables] = useState<ReadonlySet<number>>(new Set());
+  const [localTapMode, setLocalTapMode] = useState<TapMode>(DEFAULT_TAP_MODE);
+  const [hostTapMode, setHostTapMode] = useState<TapMode>(state.tapMode);
+  const [hostTapModeLocked, setHostTapModeLocked] = useState(state.tapModeLocked);
   const [transientError, setTransientError] = useState<string | null>(null);
   const [showAllPorts, setShowAllPorts] = useState(false);
   const [rangeStart, setRangeStart] = useState(String(state.range.start));
@@ -21,11 +25,19 @@ export function useSessionUiState(state: SessionState) {
   useEffect(() => setRangeStart(String(state.range.start)), [state.range.start]);
   useEffect(() => setRangeEnd(String(state.range.end)), [state.range.end]);
   useEffect(() => setRenameValue(state.name), [state.name]);
+  useEffect(() => setHostTapMode(state.tapMode), [state.tapMode]);
+  useEffect(() => setHostTapModeLocked(state.tapModeLocked), [state.tapModeLocked]);
   return {
     beepsEnabled,
     setBeepsEnabled,
     mutedTables,
     setMutedTables,
+    localTapMode,
+    setLocalTapMode,
+    hostTapMode,
+    setHostTapMode,
+    hostTapModeLocked,
+    setHostTapModeLocked,
     transientError,
     setTransientError,
     showAllPorts,

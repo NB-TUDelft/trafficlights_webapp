@@ -54,6 +54,17 @@ pub fn normalize_session_name(raw: &str) -> Result<String, ProtoError> {
     Ok(trimmed.to_string())
 }
 
+/// What a normal tap or click on a table tile does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TapMode {
+    /// Reset the tapped table to green immediately (default).
+    #[default]
+    Green,
+    /// Cycle green -> orange -> red -> green.
+    Cycle,
+}
+
 /// How many in-range tables currently show each color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ColorCounts {
@@ -258,6 +269,15 @@ pub enum SessionClientMsg {
         /// Requested new name (not yet normalized).
         name: String,
     },
+    /// Creator-only: set the host tap mode and whether viewers are locked to
+    /// the host's tap mode.
+    SetTapMode {
+        /// Host's chosen tap mode.
+        tap_mode: TapMode,
+        /// When true, all viewer clients follow `tap_mode` and cannot toggle
+        /// their own tap-mode switch.
+        locked: bool,
+    },
     /// Creator-only: close the session for everyone now.
     EndSession,
     /// Liveness check; answered with [`SessionServerMsg::Pong`].
@@ -299,6 +319,12 @@ pub enum SessionServerMsg {
         firmware: Option<FirmwareInfo>,
         /// Connected viewer count, excluding the creator.
         viewer_count: u32,
+        /// Host's current tap mode (`green` by default).
+        #[serde(default)]
+        tap_mode: TapMode,
+        /// Whether viewer clients are locked to the host's tap mode.
+        #[serde(default)]
+        tap_mode_locked: bool,
         /// Whether this connection authenticated as the creator.
         is_creator: bool,
         /// Out-of-range stations heard; creator-only debugging data.
@@ -346,8 +372,8 @@ pub enum SessionServerMsg {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         firmware: Option<FirmwareInfo>,
     },
-    /// Session metadata changed: renamed, re-ranged, or a viewer joined
-    /// or left.
+    /// Session metadata changed: renamed, re-ranged, tap mode changed, or a
+    /// viewer joined or left.
     SessionMeta {
         /// Current session name.
         name: String,
@@ -355,6 +381,12 @@ pub enum SessionServerMsg {
         range: TableRange,
         /// Connected viewer count, excluding the creator.
         viewer_count: u32,
+        /// Host's current tap mode.
+        #[serde(default)]
+        tap_mode: TapMode,
+        /// Whether viewer clients are locked to the host's tap mode.
+        #[serde(default)]
+        tap_mode_locked: bool,
     },
     /// Creator-only: write this command to the serial device. The
     /// browser formats it with `wire::format_command` (through the WASM
@@ -394,7 +426,7 @@ pub enum SessionServerMsg {
 mod tests {
     use super::{
         normalize_session_name, ColorCounts, LobbyClientMsg, LobbyServerMsg, ServerBuildInfo,
-        SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, UnlistedTable,
+        SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, TapMode, UnlistedTable,
     };
     use crate::error::ProtoError;
     use crate::stats::EndReason;
@@ -606,6 +638,23 @@ mod tests {
                 name: "New".to_string()
             })
         );
+        assert_eq!(
+            json(&SessionClientMsg::SetTapMode {
+                tap_mode: TapMode::Cycle,
+                locked: true,
+            }),
+            "{\"type\":\"set_tap_mode\",\"tap_mode\":\"cycle\",\"locked\":true}"
+        );
+        assert_eq!(
+            serde_json::from_str::<SessionClientMsg>(
+                "{\"type\":\"set_tap_mode\",\"tap_mode\":\"green\",\"locked\":false}"
+            )
+            .ok(),
+            Some(SessionClientMsg::SetTapMode {
+                tap_mode: TapMode::Green,
+                locked: false,
+            })
+        );
     }
 
     #[test]
@@ -635,6 +684,8 @@ mod tests {
             port_label: None,
             firmware: Some(FirmwareInfo::legacy()),
             viewer_count: 2,
+            tap_mode: TapMode::Green,
+            tap_mode_locked: false,
             is_creator: false,
             unlisted_tables: Vec::new(),
             server_now_ms: 1_764_086_420_000,

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseLobbyServerMsg } from "@/protocol/parse";
 import { parseSessionServerMsg } from "@/protocol/parse-session";
 import { initialSessionState, sessionReducer } from "@/protocol/reducers";
+import { tapTargetColor } from "@/protocol/types";
 import { serverInfo, snapshotMsg, summary } from "./fixtures";
 
 describe("protocol hardening", () => {
@@ -63,5 +64,43 @@ describe("protocol hardening", () => {
         sessions: [{ ...summary, created_at_ms: 1.5 }],
       }),
     ).toBeNull();
+  });
+
+  it("parses and reduces tap mode and lock state from snapshot and session_meta", () => {
+    expect(tapTargetColor("red", "green")).toBe("green");
+    expect(tapTargetColor("orange", "green")).toBe("green");
+    expect(tapTargetColor("green", "green")).toBe("green");
+    expect(tapTargetColor("green", "cycle")).toBe("orange");
+    expect(tapTargetColor("orange", "cycle")).toBe("red");
+    expect(tapTargetColor("red", "cycle")).toBe("green");
+
+    const parsedSnap = parseSessionServerMsg({
+      ...snapshotMsg(),
+      tap_mode: "cycle",
+      tap_mode_locked: true,
+    });
+    expect(parsedSnap?.type).toBe("snapshot");
+    if (parsedSnap?.type !== "snapshot") {
+      return;
+    }
+    let state = sessionReducer(initialSessionState, parsedSnap);
+    expect(state.tapMode).toBe("cycle");
+    expect(state.tapModeLocked).toBe(true);
+
+    const parsedMeta = parseSessionServerMsg({
+      type: "session_meta",
+      name: "Studio 3B",
+      range: { start: 1, end: 60 },
+      viewer_count: 4,
+      tap_mode: "green",
+      tap_mode_locked: false,
+    });
+    expect(parsedMeta?.type).toBe("session_meta");
+    if (parsedMeta?.type !== "session_meta") {
+      return;
+    }
+    state = sessionReducer(state, parsedMeta);
+    expect(state.tapMode).toBe("green");
+    expect(state.tapModeLocked).toBe(false);
   });
 });

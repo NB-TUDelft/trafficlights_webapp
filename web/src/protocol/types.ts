@@ -3,10 +3,12 @@
 // definitions are the source of truth; JSON uses snake_case type tags.
 
 export type Color = "green" | "orange" | "red";
+export type TapMode = "green" | "cycle";
 
 export const COLOR_GREEN: Color = "green";
 export const COLOR_ORANGE: Color = "orange";
 export const COLOR_RED: Color = "red";
+export const DEFAULT_TAP_MODE: TapMode = "green";
 
 export const MIN_TABLE_ID = 1;
 export const MAX_TABLE_ID = 9999;
@@ -25,6 +27,10 @@ export function nextCycleColor(color: Color): Color {
     return COLOR_RED;
   }
   return COLOR_GREEN;
+}
+
+export function tapTargetColor(color: Color, mode: TapMode): Color {
+  return mode === "cycle" ? nextCycleColor(color) : COLOR_GREEN;
 }
 
 export interface TableRange {
@@ -161,6 +167,7 @@ export type SessionClientMsg =
   | { type: "reset_all" }
   | { type: "set_table_range"; start: number; end: number }
   | { type: "rename_session"; name: string }
+  | { type: "set_tap_mode"; tap_mode: TapMode; locked: boolean }
   | { type: "end_session" }
   | { type: "ping" };
 
@@ -176,6 +183,8 @@ export type SessionServerMsg =
       port_label?: string;
       firmware?: FirmwareInfo;
       viewer_count: number;
+      tap_mode?: TapMode;
+      tap_mode_locked?: boolean;
       is_creator: boolean;
       unlisted_tables?: UnlistedTable[];
       server_now_ms: number;
@@ -195,7 +204,14 @@ export type SessionServerMsg =
       port_label?: string;
       firmware?: FirmwareInfo;
     }
-  | { type: "session_meta"; name: string; range: TableRange; viewer_count: number }
+  | {
+      type: "session_meta";
+      name: string;
+      range: TableRange;
+      viewer_count: number;
+      tap_mode?: TapMode;
+      tap_mode_locked?: boolean;
+    }
   | { type: "serial_command"; command: SerialCommand }
   | { type: "unlisted_tables"; tables: UnlistedTable[] }
   | { type: "session_ended"; reason: EndReason; log_available: boolean }

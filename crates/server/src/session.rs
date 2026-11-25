@@ -33,7 +33,8 @@ use std::time::Instant;
 use tokio::task::AbortHandle;
 use trafficlights_proto::{
     normalize_session_name, ChangeSource, Color, EndReason, FirmwareInfo, FirmwareMode, JsonlEvent,
-    SerialCommand, SessionClientMsg, SessionServerMsg, SessionSummary, TableRange, MAX_STATION_ID,
+    SerialCommand, SessionClientMsg, SessionServerMsg, SessionSummary, TableRange, TapMode,
+    MAX_STATION_ID,
 };
 
 use crate::board::Board;
@@ -92,6 +93,8 @@ pub struct Session {
     receiver_connected: bool,
     port_label: Option<String>,
     firmware: Option<FirmwareInfo>,
+    tap_mode: TapMode,
+    tap_mode_locked: bool,
     creator: Option<Client>,
     viewers: HashMap<ConnId, Client>,
     pending: HashMap<ConnId, Client>,
@@ -114,6 +117,8 @@ impl Session {
             receiver_connected: false,
             port_label: None,
             firmware: None,
+            tap_mode: TapMode::Green,
+            tap_mode_locked: false,
             creator: None,
             viewers: HashMap::new(),
             pending: HashMap::new(),
@@ -233,6 +238,8 @@ impl Session {
             port_label: self.port_label.clone(),
             firmware: self.firmware.clone(),
             viewer_count: self.viewer_count(),
+            tap_mode: self.tap_mode,
+            tap_mode_locked: self.tap_mode_locked,
             is_creator,
             unlisted_tables: if is_creator {
                 self.board.unlisted_tables()
@@ -260,6 +267,8 @@ impl Session {
             name: self.name.clone(),
             range: self.board.range(),
             viewer_count: self.viewer_count(),
+            tap_mode: self.tap_mode,
+            tap_mode_locked: self.tap_mode_locked,
         }
     }
 
@@ -410,6 +419,7 @@ fn creator_mutating(message: &SessionClientMsg) -> bool {
             | SessionClientMsg::ResetAll
             | SessionClientMsg::SetTableRange { .. }
             | SessionClientMsg::RenameSession { .. }
+            | SessionClientMsg::SetTapMode { .. }
     )
 }
 
@@ -559,6 +569,13 @@ pub(crate) async fn handle(
                 "Session name must be 1 to 80 characters without control characters.",
             )),
         },
+        SessionClientMsg::SetTapMode { tap_mode, locked } => {
+            if session.tap_mode != tap_mode || session.tap_mode_locked != locked {
+                session.tap_mode = tap_mode;
+                session.tap_mode_locked = locked;
+                session.broadcast(&session.meta());
+            }
+        }
         SessionClientMsg::EndSession => {
             state.finalize(cell, &mut session, EndReason::Manual).await;
         }

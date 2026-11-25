@@ -38,7 +38,7 @@ pub use wire::{
 };
 pub use ws::{
     normalize_session_name, ColorCounts, LobbyClientMsg, LobbyServerMsg, ServerBuildInfo,
-    SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, UnlistedTable,
+    SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, TapMode, UnlistedTable,
 };
 
 /// Version of the structured event and command protocol shared by the

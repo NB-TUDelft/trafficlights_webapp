@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use trafficlights_proto::{
     ChangeSource, Color, ColorCounts, FirmwareInfo, FirmwareKind, FirmwareMode, JsonlEvent,
-    SerialCommand, SessionClientMsg, SessionServerMsg, TableRange, UnlistedTable,
+    SerialCommand, SessionClientMsg, SessionServerMsg, TableRange, TapMode, UnlistedTable,
 };
 use trafficlights_server::ws::SET_TABLE_BURST;
 
@@ -222,6 +222,10 @@ async fn viewers_are_forbidden_from_every_creator_control() {
         SessionClientMsg::SetTableRange { start: 1, end: 5 },
         SessionClientMsg::RenameSession {
             name: "Hijacked".to_string(),
+        },
+        SessionClientMsg::SetTapMode {
+            tap_mode: TapMode::Cycle,
+            locked: true,
         },
         SessionClientMsg::EndSession,
     ];
@@ -995,5 +999,71 @@ async fn a_station_mode_board_never_counts_as_a_receiver() {
     assert_eq!(
         error_code(&creator.recv_until(is_error).await),
         "invalid_range"
+    );
+}
+
+#[tokio::test]
+async fn the_creator_sets_and_locks_tap_mode_for_viewers() {
+    let server = TestServer::start(|_| {}).await;
+    let session = server.create("Room", 1, 10).await;
+    let mut creator = server.creator(&session).await;
+    let mut viewer = server.viewer(&session.id).await;
+
+    creator
+        .send(&SessionClientMsg::SetTapMode {
+            tap_mode: TapMode::Cycle,
+            locked: true,
+        })
+        .await;
+    let meta = viewer
+        .recv_until(|msg: &SessionServerMsg| matches!(msg, SessionServerMsg::SessionMeta { .. }))
+        .await;
+    assert!(
+        matches!(
+            meta,
+            SessionServerMsg::SessionMeta {
+                tap_mode: TapMode::Cycle,
+                tap_mode_locked: true,
+                ..
+            }
+        ),
+        "unexpected {meta:?}"
+    );
+
+    // Late joiners immediately receive the locked tap mode in their snapshot.
+    let mut late = server.ws_ok(&format!("/ws/sessions/{}", session.id)).await;
+    let snapshot: SessionServerMsg = late.recv().await;
+    assert!(
+        matches!(
+            snapshot,
+            SessionServerMsg::Snapshot {
+                tap_mode: TapMode::Cycle,
+                tap_mode_locked: true,
+                ..
+            }
+        ),
+        "unexpected {snapshot:?}"
+    );
+
+    // Unlocking broadcasts back to everyone.
+    creator
+        .send(&SessionClientMsg::SetTapMode {
+            tap_mode: TapMode::Green,
+            locked: false,
+        })
+        .await;
+    let unlocked = viewer
+        .recv_until(|msg: &SessionServerMsg| matches!(msg, SessionServerMsg::SessionMeta { .. }))
+        .await;
+    assert!(
+        matches!(
+            unlocked,
+            SessionServerMsg::SessionMeta {
+                tap_mode: TapMode::Green,
+                tap_mode_locked: false,
+                ..
+            }
+        ),
+        "unexpected {unlocked:?}"
     );
 }

@@ -27,8 +27,17 @@ import type {
   SessionServerMsg,
   TableEntry,
   TableRange,
+  TapMode,
   UnlistedTable,
 } from "./types";
+
+function optionalTapMode(rec: JsonRecord, key: string): TapMode | undefined {
+  const value = rec[key];
+  if (value === "green" || value === "cycle") {
+    return value;
+  }
+  return undefined;
+}
 
 function endReason(value: unknown): EndReason | null {
   if (value === "manual" || value === "grace_timeout" || value === "shutdown") {
@@ -149,6 +158,14 @@ function buildSnapshot(rec: JsonRecord, parts: SnapshotParts): SessionServerMsg 
   if (firmware !== undefined) {
     msg.firmware = firmware;
   }
+  const tapMode = optionalTapMode(rec, "tap_mode");
+  if (tapMode !== undefined) {
+    msg.tap_mode = tapMode;
+  }
+  const tapModeLocked = boolField(rec, "tap_mode_locked");
+  if (tapModeLocked !== null) {
+    msg.tap_mode_locked = tapModeLocked;
+  }
   return msg;
 }
 
@@ -207,7 +224,21 @@ function parseSessionMeta(rec: JsonRecord): SessionServerMsg | null {
   if (name === null || range === null || viewerCount === null) {
     return null;
   }
-  return { type: "session_meta", name, range, viewer_count: viewerCount };
+  const msg: Extract<SessionServerMsg, { type: "session_meta" }> = {
+    type: "session_meta",
+    name,
+    range,
+    viewer_count: viewerCount,
+  };
+  const tapMode = optionalTapMode(rec, "tap_mode");
+  if (tapMode !== undefined) {
+    msg.tap_mode = tapMode;
+  }
+  const tapModeLocked = boolField(rec, "tap_mode_locked");
+  if (tapModeLocked !== null) {
+    msg.tap_mode_locked = tapModeLocked;
+  }
+  return msg;
 }
 
 function parseSerialCommandMsg(rec: JsonRecord): SessionServerMsg | null {

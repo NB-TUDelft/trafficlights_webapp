@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { firmwareBadgeLabel } from "@/lib/firmware";
-import type { FirmwareInfo } from "@/protocol/types";
+import type { FirmwareInfo, TapMode } from "@/protocol/types";
 import { MAX_TABLE_ID, MIN_TABLE_ID } from "@/protocol/types";
+import { ToggleSwitch } from "./ToggleSwitch";
 
 export interface SerialCardProps {
   connected: boolean;
@@ -16,7 +17,7 @@ export interface SerialCardProps {
   onDisconnect: () => void;
 }
 
-export function SerialConnectionCard(props: SerialCardProps) {
+export function SerialConnectionCard(props: Readonly<SerialCardProps>) {
   const label = props.portLabel ?? "No receiver selected";
   return (
     <article className="control-card">
@@ -73,7 +74,7 @@ export interface RangeCardProps {
   onApply: () => void;
 }
 
-export function TableRangeCard(props: RangeCardProps) {
+export function TableRangeCard(props: Readonly<RangeCardProps>) {
   return (
     <article className="control-card">
       <h2 className="card-label">Table Range</h2>
@@ -108,15 +109,24 @@ export function TableRangeCard(props: RangeCardProps) {
   );
 }
 
+function tapModeHint(tapMode: TapMode, lockedForViewer: boolean): string {
+  const modeText = tapMode === "cycle" ? "Tap cycles colors" : "Tap resets to green";
+  return lockedForViewer ? `Locked by host · ${modeText}` : modeText;
+}
+
 export interface QuickActionsProps {
   receiverConnected: boolean;
   beepsEnabled: boolean;
   viewerCount: number;
+  tapMode: TapMode;
+  tapModeLocked: boolean;
   onResetAll: () => void;
   onToggleBeeps: () => void;
+  onToggleTapMode: () => void;
+  onToggleTapModeLock: () => void;
 }
 
-export function QuickActionsCard(props: QuickActionsProps) {
+export function QuickActionsCard(props: Readonly<QuickActionsProps>) {
   return (
     <article className="control-card">
       <h2 className="card-label">Quick Actions</h2>
@@ -126,6 +136,20 @@ export function QuickActionsCard(props: QuickActionsProps) {
       <button type="button" aria-pressed={props.beepsEnabled} onClick={props.onToggleBeeps}>
         {props.beepsEnabled ? "Beeps On" : "Beeps Off"}
       </button>
+      <ToggleSwitch
+        id="host-tap-mode"
+        label="Cycle on tap"
+        hint={tapModeHint(props.tapMode, false)}
+        checked={props.tapMode === "cycle"}
+        onToggle={props.onToggleTapMode}
+      />
+      <ToggleSwitch
+        id="host-tap-lock"
+        label="Lock tap mode"
+        hint={props.tapModeLocked ? "Viewers follow host" : "Viewers choose own"}
+        checked={props.tapModeLocked}
+        onToggle={props.onToggleTapModeLock}
+      />
       <p className="muted-text">{props.viewerCount} viewers connected</p>
     </article>
   );
@@ -134,18 +158,33 @@ export function QuickActionsCard(props: QuickActionsProps) {
 export interface AudioInfoProps {
   beepsEnabled: boolean;
   viewerCount: number;
+  tapMode: TapMode;
+  tapModeLocked: boolean;
   onToggleBeeps: () => void;
+  onToggleTapMode: () => void;
 }
 
-export function AudioInfoCard(props: AudioInfoProps) {
+export function AudioInfoCard(props: Readonly<AudioInfoProps>) {
+  const tapInstructions =
+    props.tapMode === "cycle"
+      ? "Tap a table tile to cycle colors. Hold or right-click for all colors."
+      : "Tap a table tile to reset to green. Hold or right-click for all colors.";
   return (
     <article className="control-card">
       <h2 className="card-label">Audio &amp; Session Info</h2>
       <button type="button" aria-pressed={props.beepsEnabled} onClick={props.onToggleBeeps}>
         {props.beepsEnabled ? "Beeps On" : "Beeps Off"}
       </button>
+      <ToggleSwitch
+        id="viewer-tap-mode"
+        label="Cycle on tap"
+        hint={tapModeHint(props.tapMode, props.tapModeLocked)}
+        checked={props.tapMode === "cycle"}
+        disabled={props.tapModeLocked}
+        onToggle={props.onToggleTapMode}
+      />
       <p className="muted-text">{props.viewerCount} viewers connected</p>
-      <p className="muted-text">Tap any table tile to cycle green → orange → red.</p>
+      <p className="muted-text">{tapInstructions}</p>
     </article>
   );
 }
@@ -161,7 +200,7 @@ export interface SessionManagementProps {
   onCancelEnd: () => void;
 }
 
-export function SessionManagementCard(props: SessionManagementProps) {
+export function SessionManagementCard(props: Readonly<SessionManagementProps>) {
   return (
     <article className="control-card">
       <h2 className="card-label">Session Management</h2>

@@ -61,14 +61,28 @@ function undismissedError(state: SessionState, dismissed: string | null): string
   return `${state.error.code}:${state.error.message}` === dismissed ? null : state.error.message;
 }
 
+export function resolveTapMode(
+  state: Pick<SessionState, "isCreator" | "tapMode" | "tapModeLocked">,
+  ui: Pick<UiState, "hostTapMode" | "localTapMode">,
+) {
+  if (state.isCreator) {
+    return ui.hostTapMode;
+  }
+  return state.tapModeLocked ? state.tapMode : ui.localTapMode;
+}
+
 function buildViewProps(args: ViewPropsArgs): SessionViewProps {
   const { state, ui, serialBridge, handlers } = args;
+  const tapModeLocked = state.isCreator ? ui.hostTapModeLocked : state.tapModeLocked;
+  const tapMode = resolveTapMode(state, ui);
   return {
     state,
     socketStatus: args.socketStatus,
     nowMs: args.nowMs,
     beepsEnabled: ui.beepsEnabled,
     mutedTables: ui.mutedTables,
+    tapMode,
+    tapModeLocked,
     transientError: ui.transientError ?? undismissedError(state, ui.dismissedError),
     serialConnected: serialBridge.serial.connected,
     serialFirmware: serialBridge.serial.firmware,
@@ -123,6 +137,11 @@ function SessionConsole({ sessionId }: { sessionId: string }) {
     setMutedTables: ui.setMutedTables,
     setBeepsEnabled: ui.setBeepsEnabled,
     beepsEnabled: ui.beepsEnabled,
+    hostTapMode: ui.hostTapMode,
+    hostTapModeLocked: ui.hostTapModeLocked,
+    setLocalTapMode: ui.setLocalTapMode,
+    setHostTapMode: ui.setHostTapMode,
+    setHostTapModeLocked: ui.setHostTapModeLocked,
     rangeStart: ui.rangeStart,
     rangeEnd: ui.rangeEnd,
     renameValue: ui.renameValue,

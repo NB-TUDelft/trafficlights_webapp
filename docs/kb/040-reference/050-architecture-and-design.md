@@ -108,7 +108,7 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
     presenting `creator_token` in the initial `auth` message—never in the URL
     query string so tokens stay out of proxy logs and browser history).
   - **Server -> All clients:** `snapshot`, `table_update`, `receiver_status`,
-    `session_meta` (name, range, viewer count, firmware summary),
+    `session_meta` (name, range, viewer count, host tap mode and lock flag),
     `session_ended`, `error`.
   - **Server -> Creator only:** `serial_command` (`SetTable { table, color }`
     or `ResetAll`), `unlisted_tables` (station IDs heard outside `start..end`,
@@ -121,7 +121,7 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
     `station_report { table, color }` (from WASM serial parser),
     `serial_status { connected, port_label?, firmware? }`, `reset_all`,
     `set_table_range { start, end }`, `rename_session { name }`,
-    `end_session`.
+    `set_tap_mode { tap_mode, locked }`, `end_session`.
 
 ## Role split, UI parity, and out-of-range handling (R1, R4, R5, R11, R12)
 
@@ -144,15 +144,18 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
     system font stack), accurate mute button tooltips, and atomic error
     handling when the receiver is offline.
   - **Normal client view:** counters, live/receiver status chip, Beeps On/Off
-    toggle, Longest On Red, and clickable table grid strictly within
-    `start..end` (with per-table mute). No serial controls, no Table Range, no
-    Reset All To Green.
+    toggle, Cycle-on-tap switch (defaulting to immediate reset-to-green on tap,
+    with long-hold or right-click opening a color picker for all colors; locked
+    and grayed out when the host enables tap-mode lock), Longest On Red, and
+    clickable table grid strictly within `start..end` (with per-table mute). No
+    serial controls, no Table Range, no Reset All To Green.
   - **Creator view** (automatically enabled when browser holds matching
     `creator_token` for `{id}`): adds Serial Connection panel (connect,
     reconnect, firmware badge, wrong-mode station warning), Table Range card,
-    `Reset All To Green`, session rename, subtle **"Unlisted tables heard"**
-    banner (e.g. catching unset ID `0` or misnumbered stations), **Download
-    statistics (.jsonl)** button, and **End session** button.
+    `Reset All To Green`, Cycle-on-tap + Lock-tap-mode switches in Quick
+    Actions, session rename, subtle **"Unlisted tables heard"** banner (e.g.
+    catching unset ID `0` or misnumbered stations), **Download statistics
+    (.jsonl)** button, and **End session** button.
 
 ## Session lifecycle and disconnect grace period
 

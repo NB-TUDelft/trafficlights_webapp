@@ -15,7 +15,7 @@ import { TableGrid } from "@/components/TableGrid";
 import type { SocketStatus } from "@/lib/socket";
 import { computeLongestOnRed } from "@/lib/time";
 import type { SessionState } from "@/protocol/reducers";
-import type { Color, FirmwareInfo } from "@/protocol/types";
+import type { Color, FirmwareInfo, TapMode } from "@/protocol/types";
 import { EXPECTED_PROTO_VERSION } from "@/protocol/types";
 
 export function sessionStatusLabel(
@@ -52,6 +52,8 @@ export interface SessionViewProps {
   nowMs: number;
   beepsEnabled: boolean;
   mutedTables: ReadonlySet<number>;
+  tapMode: TapMode;
+  tapModeLocked: boolean;
   transientError: string | null;
   serialConnected: boolean;
   serialFirmware: FirmwareInfo | null;
@@ -64,9 +66,11 @@ export interface SessionViewProps {
   renameValue: string;
   confirmEnd: boolean;
   onDismissError: () => void;
-  onCycleTable: (table: number, color: Color) => void;
+  onSetTable: (table: number, color: Color) => void;
   onToggleMute: (table: number) => void;
   onToggleBeeps: () => void;
+  onToggleTapMode: () => void;
+  onToggleTapModeLock: () => void;
   onConnectSerial: () => void;
   onDisconnectSerial: () => void;
   onShowAllChange: (value: boolean) => void;
@@ -82,7 +86,7 @@ export interface SessionViewProps {
   onCancelEnd: () => void;
 }
 
-function CreatorControls(props: SessionViewProps) {
+function CreatorControls(props: Readonly<SessionViewProps>) {
   return (
     <>
       <SerialConnectionCard
@@ -107,8 +111,12 @@ function CreatorControls(props: SessionViewProps) {
         receiverConnected={props.state.receiverConnected}
         beepsEnabled={props.beepsEnabled}
         viewerCount={props.state.viewerCount}
+        tapMode={props.tapMode}
+        tapModeLocked={props.tapModeLocked}
         onResetAll={props.onResetAll}
         onToggleBeeps={props.onToggleBeeps}
+        onToggleTapMode={props.onToggleTapMode}
+        onToggleTapModeLock={props.onToggleTapModeLock}
       />
       <SessionManagementCard
         renameValue={props.renameValue}
@@ -124,7 +132,7 @@ function CreatorControls(props: SessionViewProps) {
   );
 }
 
-export function SessionView(props: SessionViewProps) {
+export function SessionView(props: Readonly<SessionViewProps>) {
   const { state } = props;
   const displayError = props.transientError;
   const firmware = props.serialFirmware ?? state.firmware;
@@ -171,7 +179,10 @@ export function SessionView(props: SessionViewProps) {
           <AudioInfoCard
             beepsEnabled={props.beepsEnabled}
             viewerCount={state.viewerCount}
+            tapMode={props.tapMode}
+            tapModeLocked={props.tapModeLocked}
             onToggleBeeps={props.onToggleBeeps}
+            onToggleTapMode={props.onToggleTapMode}
           />
         )}
         <LongestOnRed entries={longest} />
@@ -179,7 +190,8 @@ export function SessionView(props: SessionViewProps) {
       <TableGrid
         tables={state.tables}
         mutedTables={props.mutedTables}
-        onCycleTable={props.onCycleTable}
+        tapMode={props.tapMode}
+        onSetTable={props.onSetTable}
         onToggleMute={props.onToggleMute}
       />
       <Footer serverInfo={state.serverInfo} />
