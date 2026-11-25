@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Docker publish
+
+# Builds the image in Actions and pushes it to GHCR. Coolify pulls it (nothing
+# is compiled on the server), and the publish step calls its deploy webhook, so
+# a green push to main is a deploy.
+#
+# Tests deliberately have no separate CI job: the Dockerfile's wasm, web and
+# Rust builder stages run the checks before producing the shipped assets and
+# binary. A failed check fails the image build, so nothing is pushed or
+# redeployed.
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build, test, push, redeploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # what lets the push to GHCR succeed
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # This only validates Markdown layout with the runner's Node; all
+      # application compilation and tests happen once, inside Docker.
+      - name: Knowledge base
+        run: scripts/kb.sh check
+
+      # When this build ran, in Unix seconds (UTC), for the identity stamps
+      # passed to the image build below.
+      - name: Build time
+        id: build_time
+        run: echo "unix=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
+      # - vars.COOLIFY_WEBHOOK_URL: this app's Deploy Webhook URL. A variable,
+      #   not a secret: inert without the key, and readable in a failed log.
+      #   The action appends force=true.
+      # - secrets.COOLIFY_TOKEN: a Coolify API token with deploy permission.
+      # Both repo-level. The redeploy skips itself while either is missing, so
+      # pushes before Coolify is wired up still publish the image.
+      #
+      # `image` is the repository path on GHCR (ghcr.io/nb-tudelft/
+      # trafficlights_webapp); the action lowercases it. build_args (one
+      # KEY=value per line) stamp the build's identity into the image: the
+      # Dockerfile compiles the commit into the server binary and the web
+      # bundle, so the footer and `--version` show which build runs.
+      - name: Build, push, and redeploy
+        uses: PlohnenSoftware/Docker-Build-and-Coolify-Deploy@v1
+        with:
+          image: nb-tudelft/trafficlights_webapp
+          build_args: |
+            TRAFFICLIGHTS_COMMIT=${{ github.sha }}
+            TRAFFICLIGHTS_BUILT_AT=${{ steps.build_time.outputs.unix }}
+          coolify_webhook_url: ${{ vars.COOLIFY_WEBHOOK_URL }}
+          coolify_deploy_api_key: ${{ secrets.COOLIFY_TOKEN }}
