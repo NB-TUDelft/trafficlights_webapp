@@ -20,11 +20,9 @@ than a fix, record it at the end of History.
      (`!get` -> `!ok mode=receiver fw=draft-1`) and station mode (`mode=station`
      warning banner and server-side refusal to mark connected).
 2. **Coolify production bring-up**:
-   - Confirm the Coolify public domain (`PUBLIC_ORIGIN=https://<host>`) and
-     GHCR image path (`ghcr.io/nb-tudelft/trafficlights_webapp`).
-   - Configure `COOLIFY_WEBHOOK_URL` (repo variable) and `COOLIFY_TOKEN` (repo
-     secret) on GitHub Actions, push `main` when ready, and verify live HTTPS
-     Web Serial and WSS traffic through Coolify.
+   - Verify live HTTPS Web Serial, WSS traffic, and automatic redeploy via
+     GitHub Actions (`COOLIFY_WEBHOOK_URL` and `COOLIFY_TOKEN` are configured
+     as repository secrets on `NB-TUDelft/trafficlights_webapp`).
 3. **SonarQube Rust plugin (server-side)**:
    - Re-enable the Rust language plugin on `sonarqube.plohnensoftware.download`
      (currently running Community Build `26.11.0.134175` without a Rust plugin)

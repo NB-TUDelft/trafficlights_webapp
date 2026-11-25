@@ -41,12 +41,12 @@ jobs:
         id: build_time
         run: echo "unix=$(date -u +%s)" >> "$GITHUB_OUTPUT"
 
-      # - vars.COOLIFY_WEBHOOK_URL: this app's Deploy Webhook URL. A variable,
-      #   not a secret: inert without the key, and readable in a failed log.
-      #   The action appends force=true.
+      # - secrets.COOLIFY_WEBHOOK_URL: this app's Deploy Webhook URL (kept as a
+      #   repo secret so other org members cannot read the host or UUID). Use
+      #   `force=true` (or omit `force=` so the action appends `force=true`).
       # - secrets.COOLIFY_TOKEN: a Coolify API token with deploy permission.
-      # Both repo-level. The redeploy skips itself while either is missing, so
-      # pushes before Coolify is wired up still publish the image.
+      # Both repo-level secrets. The redeploy skips itself while either is
+      # missing, so pushes before Coolify is wired up still publish the image.
       #
       # `image` is the repository path on GHCR (ghcr.io/nb-tudelft/
       # trafficlights_webapp); the action lowercases it. build_args (one
@@ -60,5 +60,5 @@ jobs:
           build_args: |
             TRAFFICLIGHTS_COMMIT=${{ github.sha }}
             TRAFFICLIGHTS_BUILT_AT=${{ steps.build_time.outputs.unix }}
-          coolify_webhook_url: ${{ vars.COOLIFY_WEBHOOK_URL }}
+          coolify_webhook_url: ${{ secrets.COOLIFY_WEBHOOK_URL }}
           coolify_deploy_api_key: ${{ secrets.COOLIFY_TOKEN }}
