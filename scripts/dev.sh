@@ -1,36 +1,50 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Start the local development preview: builds WASM, runs the Rust Axum server
-# on BIND (default 127.0.0.1:3000), and starts Vite HMR on http://localhost:5173
-# proxying /api and /ws to the backend.
+# Start the local development preview via Docker Compose (`compose.dev.yaml`),
+# building and running the production-identical distroless image on
+# http://127.0.0.1:3000.
 #
-# Usage: scripts/dev.sh [--embedded]
+# Usage: scripts/dev.sh [--down | --hmr]
 #
-#   (default)   Run Rust server (:3000) + Vite HMR frontend (:5173) together.
-#   --embedded  Build WASM + production web/dist and run only the Rust server
-#               on http://127.0.0.1:3000 (mirrors the container setup).
+#   (default)   Run `docker compose -f compose.dev.yaml up --build` on :3000.
+#   --down      Stop and remove the local compose stack.
+#   --hmr       Run native Rust server (:3000) + Vite HMR (:5173) without Docker.
 
 set -eu
 cd "$(dirname "$0")/.."
 
-PATH="$HOME/.cargo/bin:$PATH"
-export PATH
-
-mode="hmr"
+mode="compose"
 case "${1:-}" in
     "") ;;
-    --embedded) mode="embedded" ;;
+    --down) mode="down" ;;
+    --hmr) mode="hmr" ;;
     -h | --help)
         sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'
         exit 0
         ;;
     *)
-        echo "usage: $0 [--embedded]" >&2
+        echo "usage: $0 [--down | --hmr]" >&2
         exit 2
         ;;
 esac
 
-# Load local .env if present (never committed).
+if [ "$mode" = "down" ]; then
+    exec docker compose -f compose.dev.yaml down
+fi
+
+if [ "$mode" = "compose" ]; then
+    echo ""
+    echo "  Preview URL (Docker Compose): http://127.0.0.1:3000"
+    echo "  Web Serial works on http://127.0.0.1:3000 in Chromium/Brave/Edge."
+    echo "  Press Ctrl-C to stop."
+    echo ""
+    exec docker compose -f compose.dev.yaml up --build
+fi
+
+# Native HMR fallback (`--hmr`).
+PATH="$HOME/.cargo/bin:$PATH"
+export PATH
+
 if [ -f .env ]; then
     set -a
     # shellcheck disable=SC1091
@@ -45,17 +59,6 @@ fi
 
 echo "Building browser WASM module..."
 scripts/build-wasm.sh
-
-if [ "$mode" = "embedded" ]; then
-    echo "Building production web bundle..."
-    nub --cwd web run build
-    bind="${BIND:-127.0.0.1:3000}"
-    echo ""
-    echo "  Preview URL (embedded SPA): http://$bind"
-    echo "  Press Ctrl-C to stop."
-    echo ""
-    exec env BIND="$bind" LOG="${LOG:-info}" cargo run -p trafficlights-server --bin trafficlights-webapp
-fi
 
 if [ ! -f web/dist/index.html ]; then
     echo "Building initial web/dist for rust-embed..."
@@ -82,7 +85,6 @@ trap cleanup EXIT INT TERM
 echo ""
 echo "  Frontend preview (Vite HMR): http://127.0.0.1:$vite_port"
 echo "  Backend server (Axum + WS):  http://$bind"
-echo "  Web Serial works on http://127.0.0.1:$vite_port in Chromium/Brave/Edge."
 echo "  Press Ctrl-C to stop both servers."
 echo ""
 
@@ -92,7 +94,6 @@ server_pid=$!
 VITE_BACKEND_URL="http://$bind" VITE_PORT="$vite_port" nub --cwd web run dev &
 vite_pid=$!
 
-# Stop both if either exits.
 while kill -0 "$server_pid" 2>/dev/null && kill -0 "$vite_pid" 2>/dev/null; do
     sleep 1
 done

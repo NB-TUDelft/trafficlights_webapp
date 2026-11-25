@@ -29,8 +29,9 @@ entry point.
 ## Daily loop
 
     nub --cwd web install  # once on a fresh clone
-    make dev               # run Rust server (:3000) + Vite HMR preview (http://127.0.0.1:5173)
-    make dev-embedded      # preview the single embedded Rust binary on http://127.0.0.1:3000
+    make dev               # build & run local preview via Docker Compose (http://127.0.0.1:3000)
+    make dev-down          # stop the local Docker Compose preview stack
+    make dev-hmr           # native Rust (:3000) + Vite HMR (:5173) without Docker
     make wasm              # compile crates/wasm -> web/src/wasm
     make web-build         # build React frontend into web/dist (embedded by server)
     make sonar             # generate Vitest + Rust lcov coverage, run SonarQube scan, poll gate
@@ -48,7 +49,7 @@ entry point.
     crates/server/         Axum 0.8 + Tokio server with rust-embed (`web/dist`)
     web/                   React 19 + Vite + TypeScript + Tailwind CSS v4 (Nub, Biome, Vitest)
     scripts/build-wasm.sh  builds crates/wasm into web/src/wasm
-    scripts/dev.sh         local dev preview runner (`make dev`, `make dev-embedded`)
+    scripts/dev.sh         local dev preview runner (`make dev`, `make dev-down`, `make dev-hmr`)
     scripts/sonar.sh       SonarQube coverage, scan, and quality-gate poll (`make sonar`)
     scripts/kb.sh          knowledge-base index, check, and graph runner
     sonar-project.properties  SonarQube project and coverage paths (no tokens or URLs)

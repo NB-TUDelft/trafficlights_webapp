@@ -23,9 +23,10 @@ always_read: true
   the SonarQube quality gate until it returns `OK`. Server URL and token live
   only in `/opt/sonar-scanner/conf/sonar-scanner.properties` or environment
   variables, never in this repository.
-- Preview locally with `make dev` (Rust server on `127.0.0.1:3000` + Vite HMR
-  on `http://127.0.0.1:5173`) or `make dev-embedded` (single embedded binary on
-  `http://127.0.0.1:3000`).
+- Preview locally with `make dev` (`docker compose -f compose.dev.yaml up
+  --build` on `http://127.0.0.1:3000`, stopped with `make dev-down`) or
+  `make dev-hmr` (native Rust server on `127.0.0.1:3000` + Vite HMR on
+  `http://127.0.0.1:5173`).
 - When changing serial-handling code or browser UI, record what was tested
   (unit/integration tests, browser checks, or a real micro:bit receiver over
   USB serial) and what was not tested. Keep in mind that only one program can

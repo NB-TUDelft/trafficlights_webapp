@@ -10,7 +10,7 @@
 #
 # There is no volume: classroom statistics are ephemeral `.jsonl` files in the
 # container's /tmp/trafficlights-logs, and they go away with the container.
-# Stop `make dev` / `cargo run` first: both listen on port 3000.
+# Stop `make dev-hmr` / `cargo run` first: both listen on port 3000.
 
 name: trafficlights-local
 
