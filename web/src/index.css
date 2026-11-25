@@ -35,6 +35,12 @@ body {
   padding: 1.2rem;
 }
 
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 .page {
   width: min(1100px, 100%);
   display: flex;
@@ -114,24 +120,6 @@ button:hover:not(:disabled) {
   justify-self: end;
 }
 
-.counter {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.counter strong {
-  font-size: clamp(1.8rem, 5vw, 2.6rem);
-}
-
-.counter.orange strong {
-  color: var(--orange);
-}
-
-.counter.red strong {
-  color: var(--red);
-}
-
 .status-icon {
   display: inline-flex;
   width: 1.3rem;
@@ -145,6 +133,42 @@ button:hover:not(:disabled) {
   height: 100%;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.counter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.counter span:first-child {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.counter strong {
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  line-height: 1.1;
+}
+
+.counter.orange strong,
+.counter.orange span:first-child svg {
+  color: var(--orange);
+}
+
+.counter.red strong,
+.counter.red span:first-child svg {
+  color: var(--red);
+}
+
+.counter .status-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .control-grid {
@@ -197,12 +221,18 @@ input[type="password"] {
   color: var(--text);
   padding: 0.45rem 0.6rem;
   font-family: inherit;
+  width: 100%;
+  min-width: 0;
 }
 
-.check-label {
-  display: block;
+label.check-label {
+  display: inline-flex;
   flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
   color: var(--text);
+  cursor: pointer;
 }
 
 .red-list {
@@ -219,4 +249,10 @@ input[type="password"] {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+.red-list .status-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--red);
 }

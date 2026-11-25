@@ -44,7 +44,11 @@ function TableCard({ entry, isMuted, onCycleTable, onToggleMute }: TableCardProp
     ? `Unmute beep for table ${entry.table}`
     : `Mute beep for table ${entry.table}`;
   return (
-    <article className="table-card" data-color={entry.color}>
+    <article
+      className="table-card"
+      data-color={entry.color}
+      title={`Table ${entry.table}: ${STATUS_LABELS[entry.color]}`}
+    >
       <button
         type="button"
         className="table-action"
@@ -54,7 +58,6 @@ function TableCard({ entry, isMuted, onCycleTable, onToggleMute }: TableCardProp
         <span className="table-label">
           <strong>{entry.table}</strong>
           <StatusIcon color={entry.color} />
-          <span className="table-status-text">{STATUS_LABELS[entry.color]}</span>
         </span>
       </button>
       <button

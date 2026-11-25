@@ -27,8 +27,13 @@ export function SerialConnectionCard(props: SerialCardProps) {
       <p>
         <span className={props.connected ? "badge badge-online" : "badge badge-offline"}>
           {props.connected ? "Connected" : "Disconnected"}
-        </span>{" "}
-        <span className="badge">{firmwareBadgeLabel(props.connected, props.firmware)}</span>
+        </span>
+        {props.connected ? (
+          <>
+            {" "}
+            <span className="badge">{firmwareBadgeLabel(props.connected, props.firmware)}</span>
+          </>
+        ) : null}
       </p>
       <label className="check-label">
         <input
