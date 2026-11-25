@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+build/
+
+# graphify code-graph output: regenerable local tool output (`make kb-graph`).
+graphify-out/
+/.claude/settings.local.json
