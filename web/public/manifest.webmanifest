@@ -1,0 +1,16 @@
+{
+  "name": "Classroom Traffic Lights",
+  "short_name": "Traffic Lights",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#10182b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ]
+}
