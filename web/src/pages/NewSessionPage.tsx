@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Footer } from "@/components/Footer";
@@ -21,6 +22,8 @@ import { isWebSerialSupported, requestMicrobitPort } from "@/serial/loader";
 import { bindPendingSerialPort, setPendingSerialPort } from "@/serial/pending";
 
 const PARSE_RADIX = 10;
+const NEW_LOGO_SIZE = 58;
+const NEW_BACK_ICON_SIZE = 16;
 
 export interface NewSessionViewProps {
   serverInfo: ServerBuildInfo | null;
@@ -72,11 +75,25 @@ function SerialPicker(props: NewSessionViewProps) {
 export function NewSessionView(props: NewSessionViewProps) {
   return (
     <main className="page">
-      <header className="hero">
-        <h1>Add session</h1>
-        <p>
-          Name your classroom session, choose its table range, and optionally pick the receiver now.
-        </p>
+      <header className="lobby-header">
+        <div className="lobby-brand">
+          <span className="brand-mark brand-mark-nav">
+            <img src="/icon.svg" width={NEW_LOGO_SIZE} height={NEW_LOGO_SIZE} alt="" />
+          </span>
+          <div className="lobby-brand-copy">
+            <h1>Add session</h1>
+            <p>
+              Name your classroom session, choose its table range, and optionally pick the receiver
+              now.
+            </p>
+          </div>
+        </div>
+        <Link className="lobby-link" to="/">
+          <span className="lobby-link-label">
+            <ArrowLeft size={NEW_BACK_ICON_SIZE} aria-hidden="true" />
+            <span>Back to Lobby</span>
+          </span>
+        </Link>
       </header>
       {props.error === null ? null : (
         <div className="banner banner-error" role="alert">
@@ -84,7 +101,7 @@ export function NewSessionView(props: NewSessionViewProps) {
         </div>
       )}
       <form
-        className="control-card session-form"
+        className="control-card session-form new-session-form"
         onSubmit={(event) => {
           event.preventDefault();
           props.onSubmit();
@@ -137,10 +154,11 @@ export function NewSessionView(props: NewSessionViewProps) {
           </label>
         ) : null}
         <SerialPicker {...props} />
-        <button type="submit" disabled={props.submitting}>
-          Create session
-        </button>
-        <Link to="/">Back to Lobby</Link>
+        <div className="form-actions">
+          <button type="submit" disabled={props.submitting}>
+            Create session
+          </button>
+        </div>
       </form>
       <Footer serverInfo={props.serverInfo} />
     </main>

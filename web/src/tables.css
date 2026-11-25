@@ -177,23 +177,7 @@ button.mute-btn svg {
 .badge-own {
   background: var(--accent);
   color: rgb(3 7 18);
-  margin-left: 0.5rem;
-}
-
-.session-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
-}
-
-.session-card a {
-  color: var(--accent);
-}
-
-.session-counts {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+  font-weight: 600;
 }
 
 .field-group {
@@ -227,5 +211,16 @@ button.mute-btn svg {
 
   .range-inputs {
     flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-card,
+  button.mute-btn {
+    transition-duration: 0ms;
+  }
+
+  .table-card:hover {
+    transform: none;
   }
 }

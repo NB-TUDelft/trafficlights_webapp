@@ -10,7 +10,7 @@ import {
 } from "@/components/CreatorPanels";
 import { Footer } from "@/components/Footer";
 import { LongestOnRed } from "@/components/LongestOnRed";
-import { SessionHeader } from "@/components/SessionHeader";
+import { SessionHeader, type SessionStatusKind } from "@/components/SessionHeader";
 import { TableGrid } from "@/components/TableGrid";
 import type { SocketStatus } from "@/lib/socket";
 import { computeLongestOnRed } from "@/lib/time";
@@ -30,6 +30,20 @@ export function sessionStatusLabel(
     return "Reconnecting...";
   }
   return receiverConnected ? "Live" : "Receiver disconnected";
+}
+
+export function sessionStatusKind(
+  socketStatus: SocketStatus,
+  receiverConnected: boolean,
+  ended: boolean,
+): SessionStatusKind {
+  if (ended) {
+    return "ended";
+  }
+  if (socketStatus !== "open") {
+    return "reconnecting";
+  }
+  return receiverConnected ? "live" : "disconnected";
 }
 
 export interface SessionViewProps {
@@ -125,6 +139,11 @@ export function SessionView(props: SessionViewProps) {
           state.receiverConnected,
           state.ended !== null,
         )}
+        statusKind={sessionStatusKind(
+          props.socketStatus,
+          state.receiverConnected,
+          state.ended !== null,
+        )}
       />
       {displayError === null ? null : (
         <ErrorBanner message={displayError} onDismiss={props.onDismissError} />
@@ -145,7 +164,7 @@ export function SessionView(props: SessionViewProps) {
         <WrongModeBanner firmware={firmware} />
       ) : null}
       {state.isCreator ? <UnlistedBanner tables={state.unlistedTables} /> : null}
-      <section className="control-grid">
+      <section className={state.isCreator ? "control-grid control-grid-creator" : "control-grid"}>
         {state.isCreator ? (
           <CreatorControls {...props} />
         ) : (

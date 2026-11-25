@@ -108,6 +108,8 @@ describe("homepage rendering", () => {
     expect(html).toContain("Add session");
     expect(html).toContain('href="/new"');
     expect(html).toContain('href="/s/sess-1"');
+    expect(html).toContain("session-card-link");
+    expect(html).toContain('data-status="live"');
     expect(html).toContain("Studio 3B");
     expect(html).toContain("Your session");
     expect(html).toContain("Tables 1");
@@ -166,6 +168,8 @@ describe("session view role split", () => {
     const html = render(<SessionView {...viewProps(baseState({ isCreator: false }))} />);
     expect(html).toContain("Beeps On");
     expect(html).toContain("Longest On Red");
+    expect(html).toContain("red-list-wrap");
+    expect(html).not.toContain("control-grid-creator");
     expect(html).toContain("Tap any table tile to cycle green");
     expect(html).not.toContain("Reset All To Green");
     expect(html).not.toContain("Table Range");
@@ -182,6 +186,8 @@ describe("session view role split", () => {
       unlistedTables: [{ table: 0, color: "red", last_seen_ms: 99 }],
     });
     const html = render(<SessionView {...viewProps(state)} />);
+    expect(html).toContain("control-grid-creator");
+    expect(html).toContain("session-nav-identity");
     expect(html).toContain("Reset All To Green");
     expect(html).toContain("Table Range");
     expect(html).toContain("Serial Connection");

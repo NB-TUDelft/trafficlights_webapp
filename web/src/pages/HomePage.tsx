@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { Link } from "react-router";
 import { Footer } from "@/components/Footer";
@@ -10,7 +11,8 @@ import { initialLobbyState, type LobbyState, lobbyReducer } from "@/protocol/red
 import { loadCreatorTokens } from "@/protocol/storage";
 import { EXPECTED_PROTO_VERSION } from "@/protocol/types";
 
-const ICON_SIZE = 64;
+const LOGO_SIZE = 78;
+const ACTION_ICON_SIZE = 18;
 
 function statusLabel(status: SocketStatus): string {
   if (status === "open") {
@@ -25,28 +27,42 @@ function statusLabel(status: SocketStatus): string {
   return "Connecting...";
 }
 
+function statusKind(status: SocketStatus): string {
+  if (status === "open") {
+    return "live";
+  }
+  if (status === "closed") {
+    return "disconnected";
+  }
+  return "reconnecting";
+}
+
 export interface HomeViewProps {
   state: LobbyState;
   status: SocketStatus;
   ownSessionIds: ReadonlySet<string>;
 }
 
-export function HomeView({ state, status, ownSessionIds }: HomeViewProps) {
+export function HomeView({ state, status, ownSessionIds }: Readonly<HomeViewProps>) {
   return (
     <main className="page">
-      <header className="hero">
-        <img src="/icon.svg" width={ICON_SIZE} height={ICON_SIZE} alt="" />
-        <h1>Classroom Traffic Lights</h1>
-        <p>
-          Teachers stream a micro:bit USB receiver from their browser and share live table status
-          with TAs and co-teachers, so questions and requests for help are visible at a glance.
-        </p>
-        <p className="hero-actions">
-          <Link className="button-link" to="/new">
-            Add session
-          </Link>
-          <span className="status-chip">{statusLabel(status)}</span>
-        </p>
+      <header className="lobby-header">
+        <div className="lobby-brand">
+          <span className="brand-mark brand-mark-lg">
+            <img src="/icon.svg" width={LOGO_SIZE} height={LOGO_SIZE} alt="" />
+          </span>
+          <div className="lobby-brand-copy">
+            <h1>Classroom Traffic Lights</h1>
+            <p>
+              Teachers stream a micro:bit USB receiver from their browser and share live table
+              status with TAs and co-teachers, so questions and requests for help are visible at a
+              glance.
+            </p>
+          </div>
+        </div>
+        <span className="status-chip" data-status={statusKind(status)} aria-live="polite">
+          {statusLabel(status)}
+        </span>
       </header>
       {state.error === null ? null : (
         <div className="banner banner-error" role="alert">
@@ -58,10 +74,23 @@ export function HomeView({ state, status, ownSessionIds }: HomeViewProps) {
           This page is out of date for the server. Please reload the page.
         </div>
       ) : null}
-      <section aria-label="Active sessions">
-        <h2>Active sessions</h2>
+      <section className="sessions-section" aria-label="Active sessions">
+        <div className="sessions-toolbar">
+          <div className="sessions-heading">
+            <h2>Active sessions</h2>
+            {state.sessions.length > 0 ? (
+              <span className="count-pill">{state.sessions.length}</span>
+            ) : null}
+          </div>
+          <Link className="button-link add-session-btn" to="/new">
+            <Plus size={ACTION_ICON_SIZE} aria-hidden="true" />
+            <span>Add session</span>
+          </Link>
+        </div>
         {state.sessions.length === 0 ? (
-          <p className="muted-text">No active sessions yet. Add a session to start streaming.</p>
+          <div className="sessions-empty">
+            <p className="muted-text">No active sessions yet. Add a session to start streaming.</p>
+          </div>
         ) : (
           <div className="session-list">
             {state.sessions.map((session) => (
