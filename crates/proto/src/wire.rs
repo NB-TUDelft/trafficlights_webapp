@@ -509,6 +509,15 @@ fn parse_legacy_line(line: &str) -> Option<SerialEvent> {
 /// discarding the identification. A bare `!err` with no reason still
 /// surfaces as a control error with an empty reason.
 fn parse_control_reply(line: &str) -> Option<SerialEvent> {
+    // Exact token match: `!error ...` must not parse as `!err` + "or ...".
+    if line == "!err" || line.starts_with("!err ") || line.starts_with("!err\t") {
+        let reason = line
+            .strip_prefix("!err")
+            .unwrap_or_default()
+            .trim_ascii()
+            .to_string();
+        return Some(SerialEvent::ControlError { reason });
+    }
     let mut tokens = line.split_ascii_whitespace();
     match tokens.next()? {
         "!ok" => {
@@ -556,14 +565,6 @@ fn parse_control_reply(line: &str) -> Option<SerialEvent> {
                     station_color,
                 },
             })
-        }
-        "!err" => {
-            let reason = line
-                .strip_prefix("!err")
-                .unwrap_or_default()
-                .trim_ascii()
-                .to_string();
-            Some(SerialEvent::ControlError { reason })
         }
         _ => None,
     }
@@ -1151,6 +1152,8 @@ mod tests {
             })
         );
         assert_eq!(parse_line("!error bad id"), None);
+        assert_eq!(parse_line("!errx bad id"), None);
+        assert_eq!(parse_line("!errors"), None);
     }
 
     #[test]

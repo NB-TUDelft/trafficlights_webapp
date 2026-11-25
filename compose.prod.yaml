@@ -33,7 +33,16 @@ services:
       # How long an ended session's statistics log stays downloadable.
       LOG_RETENTION_SECONDS: ${LOG_RETENTION_SECONDS:-600}
       MAX_SESSIONS: ${MAX_SESSIONS:-32}
+      MAX_CONNECTIONS: ${MAX_CONNECTIONS:-512}
       # Ephemeral by design (no volume): statistics are streamed to disk, not
       # held in RAM, and vanish with the container.
       LOG_DIR: ${LOG_DIR:-/tmp/trafficlights-logs}
       LOG: ${LOG:-info}
+    read_only: true
+    tmpfs:
+      - "/tmp:size=64m,noexec,nosuid,nodev"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    mem_limit: 128m

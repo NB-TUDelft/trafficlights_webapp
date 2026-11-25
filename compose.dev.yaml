@@ -28,6 +28,15 @@ services:
       LOG_RETENTION_SECONDS: ${LOG_RETENTION_SECONDS:-600}
       # Empty means session creation is open (a blank value counts as unset).
       CREATE_SESSION_PIN: ${CREATE_SESSION_PIN:-}
+      MAX_CONNECTIONS: ${MAX_CONNECTIONS:-512}
       # No PUBLIC_ORIGIN: plain http here, so the WebSocket Origin check stays
       # off. Production sets it (see compose.prod.yaml).
+    read_only: true
+    tmpfs:
+      - "/tmp:size=64m,noexec,nosuid,nodev"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    mem_limit: 128m
     restart: "no"

@@ -219,7 +219,20 @@ fn embedded(path: &str) -> Option<Response> {
     let file = WebAssets::get(path)?;
     Some(
         (
-            [(header::CONTENT_TYPE, content_type(path))],
+            [
+                (header::CONTENT_TYPE, content_type(path)),
+                (
+                    header::X_CONTENT_TYPE_OPTIONS,
+                    "nosniff".to_string(),
+                ),
+                (header::REFERRER_POLICY, "no-referrer".to_string()),
+                (header::X_FRAME_OPTIONS, "DENY".to_string()),
+                (
+                    header::CONTENT_SECURITY_POLICY,
+                    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+                        .to_string(),
+                ),
+            ],
             file.data.into_owned(),
         )
             .into_response(),

@@ -18,6 +18,8 @@ pub const DEFAULT_LOG_DIR: &str = "/tmp/trafficlights-logs";
 pub const DEFAULT_LOG_RETENTION_SECONDS: u64 = 600;
 /// Default `MAX_SESSIONS`.
 pub const DEFAULT_MAX_SESSIONS: usize = 32;
+/// Default `MAX_CONNECTIONS`.
+pub const DEFAULT_MAX_CONNECTIONS: usize = 512;
 /// Default [`ServerConfig::auth_window`].
 pub const DEFAULT_AUTH_WINDOW: Duration = Duration::from_secs(1);
 
@@ -60,6 +62,9 @@ pub struct ServerConfig {
     pub log_retention: Duration,
     /// `MAX_SESSIONS`: the cap on simultaneously active sessions.
     pub max_sessions: usize,
+    /// `MAX_CONNECTIONS`: the cap on simultaneously open WebSocket
+    /// connections (lobby and sessions together).
+    pub max_connections: usize,
     /// How long a new session connection may take to send its `auth`
     /// message before it is counted as a viewer. The creator's browser
     /// authenticates right after connecting, so it never shows up as a
@@ -78,6 +83,7 @@ impl Default for ServerConfig {
             log_dir: PathBuf::from(DEFAULT_LOG_DIR),
             log_retention: Duration::from_secs(DEFAULT_LOG_RETENTION_SECONDS),
             max_sessions: DEFAULT_MAX_SESSIONS,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
             auth_window: DEFAULT_AUTH_WINDOW,
         }
     }
@@ -96,6 +102,7 @@ impl fmt::Debug for ServerConfig {
             .field("log_dir", &self.log_dir)
             .field("log_retention", &self.log_retention)
             .field("max_sessions", &self.max_sessions)
+            .field("max_connections", &self.max_connections)
             .field("auth_window", &self.auth_window)
             .finish()
     }
@@ -148,6 +155,13 @@ impl ServerConfig {
                 }
                 None => defaults.max_sessions,
             },
+            max_connections: match get("MAX_CONNECTIONS") {
+                Some(value) => {
+                    let max = parse_number("MAX_CONNECTIONS", &value, 1)?;
+                    usize::try_from(max).unwrap_or(usize::MAX)
+                }
+                None => defaults.max_connections,
+            },
             auth_window: defaults.auth_window,
         })
     }
@@ -161,6 +175,21 @@ impl ServerConfig {
         }
         origin.is_some_and(|origin| self.public_origins.iter().any(|allowed| allowed == origin))
     }
+}
+
+/// Whether a `BIND` value names a loopback host (`127.0.0.1`, `::1`, or
+/// `localhost`), so a bare local run needs no `PUBLIC_ORIGIN`.
+pub fn is_loopback_bind(bind: &str) -> bool {
+    let host = if let Some(rest) = bind.trim().strip_prefix('[') {
+        rest.split(']').next().unwrap_or_default()
+    } else {
+        bind.trim()
+            .rsplit_once(':')
+            .map_or(bind.trim(), |(host, _)| host)
+    };
+    host.eq_ignore_ascii_case("127.0.0.1")
+        || host.eq_ignore_ascii_case("::1")
+        || host.eq_ignore_ascii_case("localhost")
 }
 
 /// Split a comma-separated `PUBLIC_ORIGIN` into the exact strings browsers
@@ -221,7 +250,7 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
-    use super::{ConfigError, ServerConfig};
+    use super::{is_loopback_bind, ConfigError, ServerConfig};
 
     fn config(vars: &[(&str, &str)]) -> Result<ServerConfig, ConfigError> {
         let vars: HashMap<String, String> = vars
@@ -243,6 +272,7 @@ mod tests {
         assert_eq!(config.log_dir.to_str(), Some("/tmp/trafficlights-logs"));
         assert_eq!(config.log_retention, Duration::from_secs(600));
         assert_eq!(config.max_sessions, 32);
+        assert_eq!(config.max_connections, 512);
         assert_eq!(config.auth_window, Duration::from_secs(1));
     }
 
@@ -259,6 +289,7 @@ mod tests {
             ("LOG_DIR", "/var/tmp/logs"),
             ("LOG_RETENTION_SECONDS", "0"),
             ("MAX_SESSIONS", "2"),
+            ("MAX_CONNECTIONS", "7"),
         ]);
         let Ok(config) = config else {
             panic!("valid configuration rejected: {config:?}");
@@ -276,6 +307,34 @@ mod tests {
         assert_eq!(config.log_dir.to_str(), Some("/var/tmp/logs"));
         assert_eq!(config.log_retention, Duration::ZERO);
         assert_eq!(config.max_sessions, 2);
+        assert_eq!(config.max_connections, 7);
+    }
+
+    #[test]
+    fn max_connections_must_be_at_least_one() {
+        assert!(config(&[("MAX_CONNECTIONS", "0")]).is_err());
+        assert!(config(&[("MAX_CONNECTIONS", "many")]).is_err());
+    }
+
+    #[test]
+    fn loopback_binds_are_recognized() {
+        for bind in [
+            "127.0.0.1:3000",
+            "[::1]:3000",
+            "localhost:3000",
+            "LOCALHOST:3000",
+            "127.0.0.1",
+        ] {
+            assert!(is_loopback_bind(bind), "{bind}");
+        }
+        for bind in [
+            "0.0.0.0:3000",
+            "[::]:3000",
+            "192.0.2.1:3000",
+            "example.com:3000",
+        ] {
+            assert!(!is_loopback_bind(bind), "{bind}");
+        }
     }
 
     #[test]

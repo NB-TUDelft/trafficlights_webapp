@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use trafficlights_proto::{
-    ChangeSource, Color, ColorCounts, JsonlEvent, SerialCommand, SessionClientMsg,
-    SessionServerMsg, TableRange, UnlistedTable,
+    ChangeSource, Color, ColorCounts, FirmwareInfo, FirmwareKind, FirmwareMode, JsonlEvent,
+    SerialCommand, SessionClientMsg, SessionServerMsg, TableRange, UnlistedTable,
 };
 use trafficlights_server::ws::SET_TABLE_BURST;
 
@@ -928,6 +928,69 @@ async fn the_creator_renames_the_session_for_everyone() {
     }
     creator
         .send(&SessionClientMsg::SetTableRange { start: 5, end: 1 })
+        .await;
+    assert_eq!(
+        error_code(&creator.recv_until(is_error).await),
+        "invalid_range"
+    );
+}
+
+#[tokio::test]
+async fn a_station_mode_board_never_counts_as_a_receiver() {
+    let server = TestServer::start(|_| {}).await;
+    let session = server.create("Room", 1, 10).await;
+    let mut creator = server.creator(&session).await;
+    let mut viewer = server.viewer(&session.id).await;
+    let station = FirmwareInfo {
+        kind: FirmwareKind::New,
+        mode: Some(FirmwareMode::Station),
+        version: Some("draft-1".to_string()),
+        station_id: Some(7),
+        station_color: Some(Color::Green),
+    };
+    creator
+        .send(&SessionClientMsg::SerialStatus {
+            connected: true,
+            port_label: Some("micro:bit (test)".to_string()),
+            firmware: Some(station.clone()),
+        })
+        .await;
+    let status = viewer
+        .recv_until(|msg: &SessionServerMsg| matches!(msg, SessionServerMsg::ReceiverStatus { .. }))
+        .await;
+    assert!(
+        matches!(
+            &status,
+            SessionServerMsg::ReceiverStatus {
+                connected: false,
+                firmware: Some(info),
+                ..
+            } if info.mode == Some(FirmwareMode::Station)
+        ),
+        "{status:?}"
+    );
+    // Clicks and reset stay refused while only a station is attached.
+    viewer
+        .send(&SessionClientMsg::SetTable {
+            table: 3,
+            color: Color::Red,
+        })
+        .await;
+    assert_eq!(
+        error_code(&viewer.recv_until(is_error).await),
+        "receiver_disconnected"
+    );
+    creator.send(&SessionClientMsg::ResetAll).await;
+    assert_eq!(
+        error_code(&creator.recv_until(is_error).await),
+        "receiver_disconnected"
+    );
+    // An over-wide range change is refused too.
+    creator
+        .send(&SessionClientMsg::SetTableRange {
+            start: 1,
+            end: 9999,
+        })
         .await;
     assert_eq!(
         error_code(&creator.recv_until(is_error).await),

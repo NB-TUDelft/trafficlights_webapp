@@ -36,7 +36,7 @@ use trafficlights_proto::{LobbyClientMsg, LobbyServerMsg, SessionClientMsg, Sess
 
 use crate::client::Client;
 use crate::session;
-use crate::state::AppState;
+use crate::state::{AppState, ConnectionGuard, CreateError};
 
 /// The largest WebSocket message (and frame) accepted from a client.
 pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
@@ -57,6 +57,8 @@ pub const SET_TABLE_PER_SECOND: u32 = 5;
 pub const CREATE_SESSION_BURST: u32 = 10;
 /// ...then this many per second.
 pub const CREATE_SESSION_PER_SECOND: u32 = 1;
+/// Failed PIN attempts on one lobby connection before it is closed.
+pub const MAX_PIN_FAILURES_PER_CONNECTION: u32 = 10;
 
 /// Whether `id` can name a session: 1 to 64 ASCII letters, digits, or
 /// hyphens. Session IDs are UUIDs, so anything else (including any path
@@ -78,9 +80,22 @@ pub(crate) async fn lobby(
         return rejected;
     }
     match upgrade {
-        Ok(upgrade) => limit(upgrade).on_upgrade(move |socket| lobby_socket(state, socket)),
+        Ok(upgrade) => {
+            let Some(guard) = state.try_connection_guard() else {
+                return too_many_connections();
+            };
+            limit(upgrade).on_upgrade(move |socket| lobby_socket(state, socket, guard))
+        }
         Err(rejection) => rejection.into_response(),
     }
+}
+
+fn too_many_connections() -> Response {
+    crate::api_error(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "too_many_connections",
+        "Too many connections; please try again later.",
+    )
 }
 
 /// `GET /ws/sessions/{id}`: one session, for viewers and its creator.
@@ -94,7 +109,12 @@ pub(crate) async fn session(
         return rejected;
     }
     match upgrade {
-        Ok(upgrade) => limit(upgrade).on_upgrade(move |socket| session_socket(state, id, socket)),
+        Ok(upgrade) => {
+            let Some(guard) = state.try_connection_guard() else {
+                return too_many_connections();
+            };
+            limit(upgrade).on_upgrade(move |socket| session_socket(state, id, socket, guard))
+        }
         Err(rejection) => rejection.into_response(),
     }
 }
@@ -126,8 +146,7 @@ fn limit(upgrade: WebSocketUpgrade) -> WebSocketUpgrade {
         .max_frame_size(MAX_MESSAGE_BYTES)
 }
 
-async fn lobby_socket(state: Arc<AppState>, socket: WebSocket) {
-    let _guard = state.connection_guard();
+async fn lobby_socket(state: Arc<AppState>, socket: WebSocket, _guard: ConnectionGuard) {
     let (client, rx) = state.new_client();
     let mut connection = Connection::new(socket, rx, client.clone());
     state.lobby_join(&client);
@@ -135,6 +154,7 @@ async fn lobby_socket(state: Arc<AppState>, socket: WebSocket) {
         client.close("server shutting down");
     }
     let mut creates = RateLimit::new(CREATE_SESSION_BURST, CREATE_SESSION_PER_SECOND);
+    let mut pin_failures: u32 = 0;
     loop {
         match connection.next_event(None).await {
             Event::Text(text) => match serde_json::from_str::<LobbyClientMsg>(&text) {
@@ -157,6 +177,12 @@ async fn lobby_socket(state: Arc<AppState>, socket: WebSocket) {
                             code: error.code().to_string(),
                             message: error.message().to_string(),
                         });
+                        if error == CreateError::InvalidPin {
+                            pin_failures += 1;
+                            if pin_failures >= MAX_PIN_FAILURES_PER_CONNECTION {
+                                client.close("too many failed PIN attempts");
+                            }
+                        }
                     }
                 }
                 Err(_) => client.send(&lobby_error("bad_request", BAD_REQUEST_MESSAGE)),
@@ -169,8 +195,12 @@ async fn lobby_socket(state: Arc<AppState>, socket: WebSocket) {
     state.lobby_leave(client.id());
 }
 
-async fn session_socket(state: Arc<AppState>, id: String, socket: WebSocket) {
-    let _guard = state.connection_guard();
+async fn session_socket(
+    state: Arc<AppState>,
+    id: String,
+    socket: WebSocket,
+    _guard: ConnectionGuard,
+) {
     let (client, rx) = state.new_client();
     let mut connection = Connection::new(socket, rx, client.clone());
     let joined = if valid_session_id(&id) {

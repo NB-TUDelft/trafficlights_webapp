@@ -203,39 +203,43 @@ async fn the_creation_pin_is_checked_when_configured() {
 }
 
 #[tokio::test]
-async fn pin_guessing_is_rate_limited_per_connection() {
+async fn pin_guessing_closes_socket_and_trips_global_limiter() {
     let server = TestServer::start(|config| {
         config.create_session_pin = Some("4321".to_string());
     })
     .await;
-    let (mut guesser, _) = server.lobby().await;
-    let attempts = 16;
-    for guess in 0..attempts {
-        guesser
+    let burst = usize::try_from(CREATE_SESSION_BURST).expect("burst");
+
+    // Ten failed PIN attempts on one socket close that lobby socket.
+    let (mut guesser_one, _) = server.lobby().await;
+    for guess in 0..burst {
+        guesser_one
             .send(&create("Room", 1, 10, Some(&format!("{guess:04}"))))
             .await;
+        assert_eq!(error_code(&guesser_one.recv().await), "invalid_pin");
     }
-    let mut checked = 0;
-    let mut limited = 0;
-    for _ in 0..attempts {
-        match error_code(&guesser.recv().await) {
-            "invalid_pin" => checked += 1,
-            "rate_limited" => limited += 1,
-            other => panic!("unexpected error {other}"),
-        }
-    }
-    let burst = usize::try_from(CREATE_SESSION_BURST).expect("burst");
-    assert!(
-        (burst..=burst + 2).contains(&checked),
-        "{checked} of {attempts} PIN guesses were checked"
-    );
-    assert_eq!(checked + limited, attempts);
+    let _ = guesser_one.expect_close().await;
     assert_eq!(server.log_files(), 0);
 
-    // The limit is per connection: another lobby still creates normally.
+    // Below the global 20/min cap, a valid PIN on a fresh socket still works.
     let (mut teacher, _) = server.lobby().await;
     teacher.send(&create("Room", 1, 10, Some("4321"))).await;
     let _session = created(&teacher.recv().await);
+
+    // Ten more failures across a second socket exhaust the global PIN bucket.
+    let (mut guesser_two, _) = server.lobby().await;
+    for guess in 0..burst {
+        guesser_two
+            .send(&create("Room", 1, 10, Some(&format!("{guess:04}"))))
+            .await;
+        assert_eq!(error_code(&guesser_two.recv().await), "invalid_pin");
+    }
+    let _ = guesser_two.expect_close().await;
+
+    // A third socket is now globally rate-limited even before checking the PIN.
+    let (mut blocked, _) = server.lobby().await;
+    blocked.send(&create("Room", 1, 10, Some("4321"))).await;
+    assert_eq!(error_code(&blocked.recv().await), "rate_limited");
 }
 
 #[tokio::test]
@@ -273,4 +277,34 @@ async fn max_sessions_caps_active_sessions() {
         matches!(ended, SessionServerMsg::SessionEnded { .. }),
         "{ended:?}"
     );
+}
+
+#[tokio::test]
+async fn a_wrong_pin_hides_name_and_range_validation() {
+    let server = TestServer::start(|config| {
+        config.create_session_pin = Some("4321".to_string());
+    })
+    .await;
+    let (mut lobby, _) = server.lobby().await;
+    // Invalid name and range, but the PIN is checked first.
+    lobby.send(&create("", 0, 0, Some("0000"))).await;
+    assert_eq!(error_code(&lobby.recv().await), "invalid_pin");
+    lobby.send(&create("Room", 1, 513, None)).await;
+    assert_eq!(error_code(&lobby.recv().await), "invalid_pin");
+    assert_eq!(server.state.active_sessions(), 0);
+}
+
+#[tokio::test]
+async fn displayed_ranges_are_capped_at_512_tables() {
+    let server = TestServer::start(|_| {}).await;
+    let (mut lobby, _) = server.lobby().await;
+    lobby.send(&create("Too wide", 1, 513, None)).await;
+    assert_eq!(error_code(&lobby.recv().await), "invalid_range");
+    // A 512-table window anywhere in the ID space is fine.
+    let ok = server.create("Window", 100, 200).await;
+    assert_eq!(server.state.active_sessions(), 1);
+    let _ = ok;
+    let full = server.create("Full512", 1, 512).await;
+    assert_eq!(server.state.active_sessions(), 2);
+    let _ = full;
 }

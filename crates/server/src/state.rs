@@ -10,7 +10,7 @@
 //! (the lobby reads cached summaries, never another session's lock), which
 //! rules out lock-order deadlocks.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::pin::pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -39,6 +39,44 @@ pub const MAX_RETAINED_LOGS: usize = 256;
 /// How long [`AppState::shutdown`] waits for clients to receive their
 /// final messages.
 const SHUTDOWN_DRAIN: Duration = Duration::from_secs(2);
+
+/// Failed creation-PIN attempts allowed server-wide per window before
+/// further attempts are refused without checking the PIN.
+pub const MAX_PIN_FAILURES: usize = 20;
+/// The sliding window for [`MAX_PIN_FAILURES`].
+pub const PIN_FAILURE_WINDOW: Duration = Duration::from_secs(60);
+/// The most tables one displayed range may hold (`end - start + 1`).
+pub const MAX_RANGE_LEN: usize = 512;
+
+/// Server-global sliding-window limiter for failed creation-PIN attempts.
+#[derive(Debug, Default)]
+pub struct PinFailureLimiter {
+    failures: VecDeque<Instant>,
+}
+
+impl PinFailureLimiter {
+    fn prune(&mut self, now: Instant) {
+        while let Some(front) = self.failures.front() {
+            if now.saturating_duration_since(*front) >= PIN_FAILURE_WINDOW {
+                self.failures.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Whether the budget is exhausted at `now`.
+    pub fn is_limited(&mut self, now: Instant) -> bool {
+        self.prune(now);
+        self.failures.len() >= MAX_PIN_FAILURES
+    }
+
+    /// Record one failed attempt at `now`.
+    pub fn record_failure(&mut self, now: Instant) {
+        self.prune(now);
+        self.failures.push_back(now);
+    }
+}
 
 /// UTC epoch milliseconds now.
 pub fn now_ms() -> i64 {
@@ -175,6 +213,8 @@ pub enum CreateError {
     ShuttingDown,
     /// The statistics log could not be created.
     Internal,
+    /// Too many failed PIN attempts server-wide in the current window.
+    RateLimited,
 }
 
 impl CreateError {
@@ -187,6 +227,7 @@ impl CreateError {
             Self::MaxSessionsReached => "max_sessions_reached",
             Self::ShuttingDown => "shutting_down",
             Self::Internal => "internal_error",
+            Self::RateLimited => "rate_limited",
         }
     }
 
@@ -196,11 +237,14 @@ impl CreateError {
             Self::InvalidName => {
                 "Session name must be 1 to 80 characters without control characters."
             }
-            Self::InvalidRange => "Table range must satisfy 1 <= start <= end <= 9999.",
+            Self::InvalidRange => {
+                "Table range must satisfy 1 <= start <= end <= 9999 and contain at most 512 tables."
+            }
             Self::InvalidPin => "Wrong or missing session creation PIN.",
             Self::MaxSessionsReached => "The maximum number of active sessions is reached.",
             Self::ShuttingDown => "The server is shutting down.",
             Self::Internal => "The session could not be created.",
+            Self::RateLimited => "Too many failed PIN attempts; please wait and try again.",
         }
     }
 }
@@ -213,6 +257,7 @@ struct Shared {
     shutting_down: AtomicBool,
     connections: AtomicUsize,
     idle: Notify,
+    pin_failures: Mutex<PinFailureLimiter>,
 }
 
 /// The shared application state behind every route.
@@ -274,6 +319,7 @@ impl AppState {
                 shutting_down: AtomicBool::new(false),
                 connections: AtomicUsize::new(0),
                 idle: Notify::new(),
+                pin_failures: Mutex::new(PinFailureLimiter::default()),
             }),
         }
     }
@@ -315,12 +361,45 @@ impl AppState {
         Client::new(self.shared.next_conn.fetch_add(1, Ordering::Relaxed))
     }
 
-    /// Count a WebSocket connection until the guard drops.
-    pub(crate) fn connection_guard(&self) -> ConnectionGuard {
-        self.shared.connections.fetch_add(1, Ordering::AcqRel);
-        ConnectionGuard {
-            state: self.clone(),
+    /// Atomically reserve one connection slot, or `None` when
+    /// `MAX_CONNECTIONS` connections are already open.
+    pub(crate) fn try_connection_guard(&self) -> Option<ConnectionGuard> {
+        let max = self.shared.config.max_connections;
+        let mut current = self.shared.connections.load(Ordering::Acquire);
+        loop {
+            if current >= max {
+                return None;
+            }
+            match self.shared.connections.compare_exchange_weak(
+                current,
+                current + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    return Some(ConnectionGuard {
+                        state: self.clone(),
+                    });
+                }
+                Err(actual) => current = actual,
+            }
         }
+    }
+
+    fn pin_limited(&self) -> bool {
+        self.shared
+            .pin_failures
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_limited(Instant::now())
+    }
+
+    fn record_pin_failure(&self) {
+        self.shared
+            .pin_failures
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .record_failure(Instant::now());
     }
 
     /// Subscribe a lobby client, sending it the snapshot first.
@@ -372,12 +451,21 @@ impl AppState {
         end: u16,
         pin: Option<&str>,
     ) -> Result<(), CreateError> {
-        let name = normalize_session_name(name).map_err(|_| CreateError::InvalidName)?;
-        let range = TableRange::new(start, end).map_err(|_| CreateError::InvalidRange)?;
+        // Check the PIN first, so callers without it get no validation
+        // oracle for names or ranges.
         if let Some(expected) = &self.shared.config.create_session_pin {
+            if self.pin_limited() {
+                return Err(CreateError::RateLimited);
+            }
             if !secrets_match(expected, pin.unwrap_or_default()) {
+                self.record_pin_failure();
                 return Err(CreateError::InvalidPin);
             }
+        }
+        let name = normalize_session_name(name).map_err(|_| CreateError::InvalidName)?;
+        let range = TableRange::new(start, end).map_err(|_| CreateError::InvalidRange)?;
+        if range.len() > MAX_RANGE_LEN {
+            return Err(CreateError::InvalidRange);
         }
         let _reservation = self.reserve_slot()?;
 
@@ -403,34 +491,44 @@ impl AppState {
             )),
         });
         let summary = {
-            let mut session = cell.session.lock().await;
-            // The receiver starts disconnected until the creator attaches it.
-            self.arm_grace(&cell, &mut session);
+            let session = cell.session.lock().await;
             session.summary()
         };
 
-        let mut registry = self.registry();
-        if self.shared.shutting_down.load(Ordering::Acquire) {
-            drop(registry);
-            let path = cell.log_path.clone();
-            tokio::spawn(async move {
-                let _ = tokio::fs::remove_file(path).await;
-            });
-            return Err(CreateError::ShuttingDown);
+        // Insert into the registry before arming the grace watchdog, so a
+        // watchdog that fires at once can never finalize a session the
+        // registry does not know yet.
+        {
+            let mut registry = self.registry();
+            if self.shared.shutting_down.load(Ordering::Acquire) {
+                drop(registry);
+                let path = cell.log_path.clone();
+                tokio::spawn(async move {
+                    let _ = tokio::fs::remove_file(path).await;
+                });
+                return Err(CreateError::ShuttingDown);
+            }
+            registry
+                .sessions
+                .insert(session_id.clone(), Arc::clone(&cell));
+            registry
+                .summaries
+                .insert(session_id.clone(), summary.clone());
         }
-        registry
-            .sessions
-            .insert(session_id.clone(), Arc::clone(&cell));
-        registry
-            .summaries
-            .insert(session_id.clone(), summary.clone());
+        {
+            let mut session = cell.session.lock().await;
+            if session.end_reason().is_none() {
+                // The receiver starts disconnected until the creator attaches it.
+                self.arm_grace(&cell, &mut session);
+            }
+        }
         tracing::info!(session_id = %session_id, "session created");
         requester.send(&LobbyServerMsg::SessionCreated {
             session_id,
             creator_token: creator_token.reveal(),
             summary,
         });
-        registry.broadcast_lobby();
+        self.registry().broadcast_lobby();
         Ok(())
     }
 
@@ -630,7 +728,46 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::{secrets_match, CreatorToken};
+    use std::time::{Duration, Instant};
+
+    use super::{
+        secrets_match, AppState, CreateError, CreatorToken, PinFailureLimiter, MAX_PIN_FAILURES,
+        PIN_FAILURE_WINDOW,
+    };
+    use crate::config::ServerConfig;
+
+    #[test]
+    fn the_pin_limiter_exhausts_and_recovers_after_the_window() {
+        let mut limiter = PinFailureLimiter::default();
+        let start = Instant::now();
+        for _ in 0..MAX_PIN_FAILURES {
+            assert!(!limiter.is_limited(start));
+            limiter.record_failure(start);
+        }
+        assert!(limiter.is_limited(start));
+        assert!(limiter.is_limited(start + PIN_FAILURE_WINDOW - Duration::from_secs(1)));
+        assert!(!limiter.is_limited(start + PIN_FAILURE_WINDOW + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn connection_slots_are_capped_and_released_on_drop() {
+        let state = AppState::new(ServerConfig {
+            max_connections: 2,
+            ..ServerConfig::default()
+        });
+        let first = state.try_connection_guard();
+        let second = state.try_connection_guard();
+        assert!(first.is_some() && second.is_some());
+        assert!(state.try_connection_guard().is_none());
+        drop(first);
+        assert!(state.try_connection_guard().is_some());
+    }
+
+    #[test]
+    fn rate_limited_is_a_stable_create_error() {
+        assert_eq!(CreateError::RateLimited.code(), "rate_limited");
+        assert!(CreateError::InvalidRange.message().contains("512"));
+    }
 
     #[test]
     fn tokens_are_64_lowercase_hex_and_unique() {

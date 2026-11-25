@@ -399,3 +399,39 @@ async fn the_statistics_log_round_trips_a_whole_class() {
     let got: Vec<JsonlEvent> = events.iter().map(unstamped).collect();
     assert_eq!(got, expected);
 }
+
+#[tokio::test]
+async fn the_embedded_app_carries_security_headers() {
+    let server = TestServer::start(|_| {}).await;
+    let (status, headers, _) = server.get("/", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let header_text = |name| {
+        headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert_eq!(header_text(header::X_CONTENT_TYPE_OPTIONS), "nosniff");
+    assert_eq!(header_text(header::REFERRER_POLICY), "no-referrer");
+    assert_eq!(header_text(header::X_FRAME_OPTIONS), "DENY");
+    let csp = header_text(header::CONTENT_SECURITY_POLICY);
+    assert!(csp.contains("default-src 'self'"), "{csp}");
+    assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
+    assert!(csp.contains("'wasm-unsafe-eval'"), "{csp}");
+}
+
+#[tokio::test]
+async fn websocket_upgrades_are_refused_past_max_connections() {
+    let server = TestServer::start(|config| config.max_connections = 1).await;
+    let _first = server.ws_ok("/ws/lobby").await;
+    assert_eq!(server.ws("/ws/lobby", None).await.err(), Some(503));
+    let session = uuid::Uuid::now_v7();
+    assert_eq!(
+        server
+            .ws(&format!("/ws/sessions/{session}"), None)
+            .await
+            .err(),
+        Some(503)
+    );
+}

@@ -40,12 +40,19 @@ impl MonotonicClock {
     }
 }
 
+/// The largest a per-session `.jsonl` log may grow (16 MiB). Past this,
+/// statistics stop but the live board keeps running.
+pub const MAX_LOG_BYTES: u64 = 16 * 1024 * 1024;
+
 /// An open session statistics log.
 #[derive(Debug)]
 pub struct SessionLog {
     file: Option<File>,
     path: PathBuf,
     clock: MonotonicClock,
+    bytes_written: u64,
+    max_bytes: u64,
+    failed: bool,
 }
 
 /// The path of a session's log inside `dir`.
@@ -63,17 +70,36 @@ impl SessionLog {
         range: TableRange,
         now_ms: i64,
     ) -> io::Result<Self> {
+        Self::create_with_cap(dir, session_id, name, range, now_ms, MAX_LOG_BYTES).await
+    }
+
+    pub(crate) async fn create_with_cap(
+        dir: &Path,
+        session_id: &str,
+        name: &str,
+        range: TableRange,
+        now_ms: i64,
+        max_bytes: u64,
+    ) -> io::Result<Self> {
         tokio::fs::create_dir_all(dir).await?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = tokio::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).await;
+        }
         let path = log_path(dir, session_id);
-        let file = OpenOptions::new()
-            .create_new(true)
-            .append(true)
-            .open(&path)
-            .await?;
+        let mut options = OpenOptions::new();
+        options.create_new(true).append(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let file = options.open(&path).await?;
         let mut log = Self {
             file: Some(file),
             path,
             clock: MonotonicClock::new(now_ms),
+            bytes_written: 0,
+            max_bytes,
+            failed: false,
         };
         log.write(&JsonlEvent::SessionStart {
             schema_version: STATS_SCHEMA_VERSION,
@@ -95,12 +121,24 @@ impl SessionLog {
     /// Append one event built from its monotonic `(ts_ms, elapsed_ms)`.
     /// A failed write is reported in the server log and otherwise ignored:
     /// the classroom keeps working even if the statistics disk is full.
-    pub async fn record(&mut self, now_ms: i64, build: impl FnOnce(i64, u64) -> JsonlEvent) {
+    /// Returns `true` only on the first failure (size cap or write error),
+    /// so the caller can tell the creator once that logging stopped.
+    pub async fn record(
+        &mut self,
+        now_ms: i64,
+        build: impl FnOnce(i64, u64) -> JsonlEvent,
+    ) -> bool {
+        if self.failed || self.file.is_none() {
+            return false;
+        }
         let (ts_ms, elapsed_ms) = self.clock.stamp(now_ms);
         let event = build(ts_ms, elapsed_ms);
         if let Err(error) = self.write(&event).await {
             tracing::warn!(path = %self.path.display(), %error, "cannot append to session log");
+            self.failed = true;
+            return true;
         }
+        false
     }
 
     /// Flush, sync, and close the file; later records are dropped.
@@ -116,13 +154,19 @@ impl SessionLog {
     }
 
     async fn write(&mut self, event: &JsonlEvent) -> io::Result<()> {
+        let mut line = event.to_jsonl_line().map_err(io::Error::other)?;
+        line.push('\n');
+        let line_bytes = u64::try_from(line.len()).unwrap_or(u64::MAX);
+        if self.bytes_written.saturating_add(line_bytes) > self.max_bytes {
+            return Err(io::Error::other("session log size cap reached"));
+        }
         let Some(file) = self.file.as_mut() else {
             return Err(io::Error::other("session log already closed"));
         };
-        let mut line = event.to_jsonl_line().map_err(io::Error::other)?;
-        line.push('\n');
         file.write_all(line.as_bytes()).await?;
-        file.flush().await
+        file.flush().await?;
+        self.bytes_written = self.bytes_written.saturating_add(line_bytes);
+        Ok(())
     }
 }
 
@@ -189,6 +233,66 @@ mod tests {
         assert!(SessionLog::create(&dir, "abc", "Again", range, 6_000)
             .await
             .is_err());
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn the_size_cap_stops_writing_and_reports_failure_once() {
+        let dir =
+            std::env::temp_dir().join(format!("trafficlights-log-cap-{}", uuid::Uuid::now_v7()));
+        let range = TableRange::default_classroom();
+        let created = SessionLog::create_with_cap(&dir, "cap", "Room 1", range, 5_000, 300).await;
+        let Ok(mut log) = created else {
+            panic!("cannot create the log: {created:?}");
+        };
+        let mut first = false;
+        for step in 0..10 {
+            first = log
+                .record(6_000 + step, |ts_ms, elapsed_ms| JsonlEvent::ViewerCount {
+                    ts_ms,
+                    elapsed_ms,
+                    viewers: 3,
+                })
+                .await;
+            if first {
+                break;
+            }
+        }
+        assert!(first, "the first capped write reports the failure");
+        let second = log
+            .record(7_000, |ts_ms, elapsed_ms| JsonlEvent::ViewerCount {
+                ts_ms,
+                elapsed_ms,
+                viewers: 4,
+            })
+            .await;
+        assert!(!second, "the failure is reported only once");
+        log.close().await;
+        let text = tokio::fs::read_to_string(log_path(&dir, "cap"))
+            .await
+            .unwrap_or_default();
+        assert!(!text.is_empty(), "{text}");
+        assert!(text.len() <= 300, "{text}");
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn log_files_and_directory_use_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir =
+            std::env::temp_dir().join(format!("trafficlights-log-perm-{}", uuid::Uuid::now_v7()));
+        let range = TableRange::default_classroom();
+        let created = SessionLog::create(&dir, "perm", "Room 1", range, 5_000).await;
+        let Ok(mut log) = created else {
+            panic!("cannot create the log: {created:?}");
+        };
+        log.close().await;
+        let dir_mode = std::fs::metadata(&dir).map(|m| m.permissions().mode() & 0o777);
+        let file_mode =
+            std::fs::metadata(log_path(&dir, "perm")).map(|m| m.permissions().mode() & 0o777);
+        assert_eq!(dir_mode.ok(), Some(0o700));
+        assert_eq!(file_mode.ok(), Some(0o600));
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 

@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
+use trafficlights_server::config::is_loopback_bind;
 use trafficlights_server::{
     bind_address, build_commit, build_router_with_state, healthcheck, version_text, AppState,
     ServerConfig,
@@ -85,6 +86,11 @@ async fn serve(config: ServerConfig) -> std::io::Result<()> {
     );
     // `Debug` redacts the creation PIN.
     tracing::info!(?config, "configuration");
+    if config.public_origins.is_empty() && !is_loopback_bind(&config.bind) {
+        tracing::warn!(
+            "PUBLIC_ORIGIN is not set while BIND is not loopback; set PUBLIC_ORIGIN in production to restrict WebSocket origins"
+        );
+    }
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
     tracing::info!(address = %listener.local_addr()?, "trafficlights-webapp listening");
     let state = Arc::new(AppState::new(config));

@@ -28,22 +28,59 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::task::AbortHandle;
 use trafficlights_proto::{
-    normalize_session_name, ChangeSource, Color, EndReason, FirmwareInfo, JsonlEvent,
+    normalize_session_name, ChangeSource, Color, EndReason, FirmwareInfo, FirmwareMode, JsonlEvent,
     SerialCommand, SessionClientMsg, SessionServerMsg, SessionSummary, TableRange, MAX_STATION_ID,
 };
 
 use crate::board::Board;
 use crate::client::{encode, Client, ConnId};
 use crate::log::SessionLog;
-use crate::state::{now_ms, AppState, Lookup, SessionCell};
+use crate::state::{now_ms, AppState, Lookup, SessionCell, MAX_RANGE_LEN};
 
 /// Longest serial port label kept, in characters.
 const MAX_PORT_LABEL_CHARS: usize = 120;
 /// Longest firmware version string kept, in characters.
 const MAX_FIRMWARE_VERSION_CHARS: usize = 64;
+/// Creator state-mutating messages: burst allowed at once.
+pub const CREATOR_MUTATION_BURST: u32 = 200;
+/// Creator state-mutating messages: refill per second.
+pub const CREATOR_MUTATION_PER_SECOND: u32 = 50;
+
+/// A token bucket for creator state-mutating messages.
+#[derive(Debug, Clone, Copy)]
+pub struct TokenBucket {
+    burst: f64,
+    per_second: f64,
+    tokens: f64,
+    updated: Instant,
+}
+
+impl TokenBucket {
+    pub fn new(burst: u32, per_second: u32, now: Instant) -> Self {
+        Self {
+            burst: f64::from(burst),
+            per_second: f64::from(per_second),
+            tokens: f64::from(burst),
+            updated: now,
+        }
+    }
+
+    pub fn allow(&mut self, now: Instant) -> bool {
+        let elapsed = now.saturating_duration_since(self.updated).as_secs_f64();
+        self.updated = self.updated.max(now);
+        self.tokens = (self.tokens + elapsed * self.per_second).min(self.burst);
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
 
 /// The mutable state of one active session.
 #[derive(Debug)]
@@ -62,6 +99,8 @@ pub struct Session {
     grace_generation: u64,
     grace_task: Option<AbortHandle>,
     end_reason: Option<EndReason>,
+    creator_bucket: TokenBucket,
+    log_failure_notified: bool,
 }
 
 impl Session {
@@ -82,6 +121,12 @@ impl Session {
             grace_generation: 0,
             grace_task: None,
             end_reason: None,
+            creator_bucket: TokenBucket::new(
+                CREATOR_MUTATION_BURST,
+                CREATOR_MUTATION_PER_SECOND,
+                Instant::now(),
+            ),
+            log_failure_notified: false,
         }
     }
 
@@ -235,17 +280,30 @@ impl Session {
         }
     }
 
+    /// Tell the creator once that statistics logging stopped.
+    fn surface_log_failure(&mut self, newly_failed: bool) {
+        if newly_failed && !self.log_failure_notified {
+            self.log_failure_notified = true;
+            self.send_to_creator(&error(
+                "log_write_failed",
+                "Statistics logging stopped (the log could not be written). The live board keeps running.",
+            ));
+        }
+    }
+
     /// Log the viewer count and tell everyone, after a viewer joined or
     /// left.
     async fn viewers_changed(&mut self, state: &AppState, now: i64) {
         let viewers = self.viewer_count();
-        self.log
+        let failed = self
+            .log
             .record(now, |ts_ms, elapsed_ms| JsonlEvent::ViewerCount {
                 ts_ms,
                 elapsed_ms,
                 viewers,
             })
             .await;
+        self.surface_log_failure(failed);
         self.broadcast(&self.meta());
         state.publish(self);
     }
@@ -278,7 +336,8 @@ impl Session {
     async fn log_receiver_status(&mut self, now: i64) {
         let connected = self.receiver_connected;
         let firmware = self.firmware.clone();
-        self.log
+        let failed = self
+            .log
             .record(now, |ts_ms, elapsed_ms| JsonlEvent::ReceiverStatus {
                 ts_ms,
                 elapsed_ms,
@@ -286,6 +345,7 @@ impl Session {
                 firmware,
             })
             .await;
+        self.surface_log_failure(failed);
     }
 
     async fn log_state_change(
@@ -297,7 +357,8 @@ impl Session {
         source: ChangeSource,
         in_range: bool,
     ) {
-        self.log
+        let failed = self
+            .log
             .record(now, |ts_ms, elapsed_ms| JsonlEvent::StateChange {
                 ts_ms,
                 elapsed_ms,
@@ -308,6 +369,7 @@ impl Session {
                 in_range,
             })
             .await;
+        self.surface_log_failure(failed);
     }
 }
 
@@ -316,6 +378,11 @@ fn error(code: &str, message: &str) -> SessionServerMsg {
         code: code.to_string(),
         message: message.to_string(),
     }
+}
+
+/// Strip ASCII control characters from client-supplied display text.
+fn sanitize_text(text: String) -> String {
+    text.chars().filter(|ch| !ch.is_ascii_control()).collect()
 }
 
 fn truncate_chars(text: String, max: usize) -> String {
@@ -330,8 +397,20 @@ fn truncate_chars(text: String, max: usize) -> String {
 fn bound_firmware(mut firmware: FirmwareInfo) -> FirmwareInfo {
     firmware.version = firmware
         .version
-        .map(|version| truncate_chars(version, MAX_FIRMWARE_VERSION_CHARS));
+        .map(|version| truncate_chars(sanitize_text(version), MAX_FIRMWARE_VERSION_CHARS));
     firmware
+}
+
+/// Creator messages that mutate state and are token-bucket limited.
+fn creator_mutating(message: &SessionClientMsg) -> bool {
+    matches!(
+        message,
+        SessionClientMsg::StationReport { .. }
+            | SessionClientMsg::SerialStatus { .. }
+            | SessionClientMsg::ResetAll
+            | SessionClientMsg::SetTableRange { .. }
+            | SessionClientMsg::RenameSession { .. }
+    )
 }
 
 /// Messages only the authenticated creator may send.
@@ -428,6 +507,13 @@ pub(crate) async fn handle(
         me.send(&error("forbidden", "Creator authorization required."));
         return;
     }
+    if creator_mutating(&message) && !session.creator_bucket.allow(Instant::now()) {
+        me.send(&error(
+            "rate_limited",
+            "Too many requests; please slow down.",
+        ));
+        return;
+    }
     match message {
         SessionClientMsg::Ping => me.send(&SessionServerMsg::Pong),
         SessionClientMsg::Auth { creator_token } => {
@@ -444,7 +530,8 @@ pub(crate) async fn handle(
             port_label,
             firmware,
         } => {
-            let port_label = port_label.map(|label| truncate_chars(label, MAX_PORT_LABEL_CHARS));
+            let port_label =
+                port_label.map(|label| truncate_chars(sanitize_text(label), MAX_PORT_LABEL_CHARS));
             let firmware = firmware.map(bound_firmware);
             serial_status(
                 state,
@@ -612,6 +699,27 @@ async fn serial_status(
         session.receiver_lost(state, cell, now).await;
         return;
     }
+    // A station-mode board is not a receiver: keep it disconnected (and
+    // keep the grace watchdog as it is) while still showing its identity.
+    let is_station = firmware
+        .as_ref()
+        .is_some_and(|info| info.mode == Some(FirmwareMode::Station));
+    if is_station {
+        let was_connected = session.receiver_connected;
+        let changed = was_connected || session.firmware != firmware;
+        session.receiver_connected = false;
+        session.port_label = port_label;
+        session.firmware = firmware;
+        if was_connected {
+            state.arm_grace(cell, session);
+        }
+        if changed {
+            session.log_receiver_status(now).await;
+        }
+        session.broadcast(&session.receiver_status());
+        state.publish(session);
+        return;
+    }
     let changed = !session.receiver_connected || session.firmware != firmware;
     session.receiver_connected = true;
     session.port_label = port_label;
@@ -662,10 +770,17 @@ async fn set_table_range(
     let Ok(next_range) = TableRange::new(start, end) else {
         me.send(&error(
             "invalid_range",
-            "Table range must satisfy 1 <= start <= end <= 9999.",
+            "Table range must satisfy 1 <= start <= end <= 9999 and contain at most 512 tables.",
         ));
         return;
     };
+    if next_range.len() > MAX_RANGE_LEN {
+        me.send(&error(
+            "invalid_range",
+            "Table range must satisfy 1 <= start <= end <= 9999 and contain at most 512 tables.",
+        ));
+        return;
+    }
     let prev_range = session.board.range();
     let (reset, pruned) = session.board.change_range(next_range);
     for (table, prev) in reset {
@@ -680,7 +795,7 @@ async fn set_table_range(
             )
             .await;
     }
-    session
+    let failed = session
         .log
         .record(now, |ts_ms, elapsed_ms| JsonlEvent::RangeChange {
             ts_ms,
@@ -689,6 +804,7 @@ async fn set_table_range(
             next_range,
         })
         .await;
+    session.surface_log_failure(failed);
     session.broadcast(&session.meta());
     session.send_snapshots(state);
     if pruned {
@@ -704,7 +820,12 @@ async fn set_table_range(
 mod tests {
     use trafficlights_proto::{Color, FirmwareInfo, SessionClientMsg};
 
-    use super::{bound_firmware, creator_only, truncate_chars, MAX_FIRMWARE_VERSION_CHARS};
+    use std::time::{Duration, Instant};
+
+    use super::{
+        bound_firmware, creator_mutating, creator_only, sanitize_text, truncate_chars, TokenBucket,
+        MAX_FIRMWARE_VERSION_CHARS,
+    };
 
     #[test]
     fn only_auth_set_table_and_ping_are_open_to_viewers() {
@@ -759,5 +880,54 @@ mod tests {
             firmware.version.map(|version| version.chars().count()),
             Some(MAX_FIRMWARE_VERSION_CHARS)
         );
+    }
+
+    #[test]
+    fn control_characters_are_stripped_from_display_text() {
+        assert_eq!(sanitize_text("a\u{0}b\nc\u{7f}d".to_string()), "abcd");
+        assert_eq!(sanitize_text("plain".to_string()), "plain");
+        let firmware = bound_firmware(FirmwareInfo {
+            version: Some("v1\u{1b}[31m".to_string()),
+            ..FirmwareInfo::legacy()
+        });
+        assert_eq!(firmware.version.as_deref(), Some("v1[31m"));
+    }
+
+    #[test]
+    fn creator_mutating_covers_exactly_the_state_changing_messages() {
+        assert!(creator_mutating(&SessionClientMsg::StationReport {
+            table: 1,
+            color: Color::Red,
+        }));
+        assert!(creator_mutating(&SessionClientMsg::SerialStatus {
+            connected: true,
+            port_label: None,
+            firmware: None,
+        }));
+        assert!(creator_mutating(&SessionClientMsg::ResetAll));
+        assert!(creator_mutating(&SessionClientMsg::SetTableRange {
+            start: 1,
+            end: 2
+        }));
+        assert!(creator_mutating(&SessionClientMsg::RenameSession {
+            name: "x".to_string()
+        }));
+        assert!(!creator_mutating(&SessionClientMsg::EndSession));
+        assert!(!creator_mutating(&SessionClientMsg::Ping));
+        assert!(!creator_mutating(&SessionClientMsg::SetTable {
+            table: 1,
+            color: Color::Red,
+        }));
+    }
+
+    #[test]
+    fn the_creator_bucket_allows_a_burst_then_refills() {
+        let start = Instant::now();
+        let mut bucket = TokenBucket::new(200, 50, start);
+        assert!((0..200).all(|_| bucket.allow(start)));
+        assert!(!bucket.allow(start));
+        let later = start + Duration::from_secs(1);
+        assert!((0..50).all(|_| bucket.allow(later)));
+        assert!(!bucket.allow(later));
     }
 }
