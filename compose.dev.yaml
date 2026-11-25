@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Local harness for the production image. NOT a deployment artifact: Coolify
+# uses the Docker Image build pack and pulls from GHCR, so nothing here runs on
+# the server. It builds the same tested stages CI does, on your machine, before
+# you push.
+#
+#   docker compose -f compose.dev.yaml up --build        # build + run on 127.0.0.1:3000
+#   docker compose -f compose.dev.yaml down              # stop
+#
+# There is no volume: classroom statistics are ephemeral `.jsonl` files in the
+# container's /tmp/trafficlights-logs, and they go away with the container.
+# Stop `make dev` / `cargo run` first: both listen on port 3000.
+
+name: trafficlights-local
+
+services:
+  trafficlights-webapp:
+    build: .
+    image: trafficlights-webapp:local
+    ports:
+      # Bound to 127.0.0.1: not meant to be reachable off-box, and on this
+      # machine `localhost` resolves to ::1, which Docker does not forward.
+      - "127.0.0.1:3000:3000"
+    environment:
+      LOG: ${LOG:-info}
+      DISCONNECT_GRACE_SECONDS: ${DISCONNECT_GRACE_SECONDS:-300}
+      LOG_RETENTION_SECONDS: ${LOG_RETENTION_SECONDS:-600}
+      # Empty means session creation is open (a blank value counts as unset).
+      CREATE_SESSION_PIN: ${CREATE_SESSION_PIN:-}
+      # No PUBLIC_ORIGIN: plain http here, so the WebSocket Origin check stays
+      # off. Production sets it (see compose.prod.yaml).
+    restart: "no"

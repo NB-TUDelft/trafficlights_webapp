@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The runtime contract: runs the image Actions published, with the variables
+# Coolify has to supply, so "the image is broken" can be told apart from
+# "Coolify is misconfigured". Not a deployment artifact either; Coolify runs
+# the image with its own settings (Docker Image build pack, the container port
+# in the Domain: https://<host>:3000).
+#
+#   PUBLIC_ORIGIN=https://trafficlights.example.com \
+#     docker compose -f compose.prod.yaml config   # validate + print the resolved contract
+#   docker compose -f compose.prod.yaml up         # pull the tag and run it locally
+#
+# Required variables use `:?`, so a missing one fails with its name. Every
+# variable is documented in .env.example.
+
+name: trafficlights-prod-contract
+
+services:
+  trafficlights-webapp:
+    image: ${TRAFFICLIGHTS_IMAGE:-ghcr.io/nb-tudelft/trafficlights_webapp:main}
+    pull_policy: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Exact public origin(s), comma-separated: the WebSocket upgrade's
+      # Origin header must match one of them, which blocks cross-site
+      # WebSocket hijacking.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?the public origin(s), e.g. https://trafficlights.example.com}
+      # Required to create a session when set; empty leaves creation open.
+      CREATE_SESSION_PIN: ${CREATE_SESSION_PIN:-}
+      # How long a session survives without its creator's receiver.
+      DISCONNECT_GRACE_SECONDS: ${DISCONNECT_GRACE_SECONDS:-300}
+      # How long an ended session's statistics log stays downloadable.
+      LOG_RETENTION_SECONDS: ${LOG_RETENTION_SECONDS:-600}
+      MAX_SESSIONS: ${MAX_SESSIONS:-32}
+      # Ephemeral by design (no volume): statistics are streamed to disk, not
+      # held in RAM, and vanish with the container.
+      LOG_DIR: ${LOG_DIR:-/tmp/trafficlights-logs}
+      LOG: ${LOG:-info}
