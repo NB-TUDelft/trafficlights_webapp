@@ -1,11 +1,12 @@
 ---
 summary: >-
   Standing rules: git repository initialized on `2026-11-25` on `main` (root
-  commit `7fe9e60`, signed, no remote yet) at the maintainer's request; commits
-  and tags are signed and signing is never bypassed; agents may commit in small
-  steps naming checks run, and must not push or add a remote unasked; branch,
-  merge and commit-message style remain open for the maintainer to settle,
-  following short imperative subjects with no type prefix meanwhile.
+  commit `7fe9e60`, signed); target GitHub repository is
+  `https://github.com/NB-TUDelft/trafficlights_webapp` (renamed from
+  `NB-TUDelft/classroom_trafficlights`, which the maintainer will force-push
+  to); linear history on `main` with short imperative GPG-signed commits (no
+  type prefix, no trailer, matching `trafficlights_firmware`); signing is never
+  bypassed; agents do not push or add a remote unasked.
 always_read: true
 ---
 
@@ -13,8 +14,11 @@ always_read: true
 
 - **The repository.** Initialized on `2026-11-25` with `git init` on `main` at
   the maintainer's request, starting with the untouched `fastapi_receiver.py`
-  as root commit `7fe9e60` (signed). There is no remote. Adding a remote and
-  pushing stay the maintainer's to ask for.
+  as root commit `7fe9e60` (signed). The target GitHub repository is
+  `https://github.com/NB-TUDelft/trafficlights_webapp` (renamed from
+  `NB-TUDelft/classroom_trafficlights`); the maintainer stated on `2026-11-25`
+  that they will force-push this repository onto it. Adding the remote and
+  pushing stay the maintainer's to run or explicitly request.
 - **Signing.** The maintainer's global git configuration sets
   `commit.gpgsign = true`, `tag.gpgsign = true` and a signing key
   (`4858F11A2D1DFCBE`, checked `2026-11-25`). Commits and tags in this
@@ -26,11 +30,7 @@ always_read: true
   git repository and make commits. Commit in small steps, one concern each,
   run `make gate` first, and name the checks run in the commit message. Do not
   push or add a remote unless asked.
-- **Open: branches, merging and message style.** As recorded in
-  `trafficlights_firmware`, the maintainer's other repositories differ between
-  short imperative subjects with no type prefix and Conventional Commits with a
-  `Co-Authored-By` trailer, and between topic branches and linear `main`. Which
-  applies here is for the maintainer to choose; record the choice in this
-  section. Commits so far follow `trafficlights_firmware`: short imperative
-  sentences with no type prefix and no trailer, on `main`, until the maintainer
-  chooses otherwise.
+- **Branches and message style (confirmed `2026-11-25`).** Keep linear history
+  on `main` with short imperative commit subjects (no type prefix and no
+  trailer), matching `trafficlights_firmware`. Remote setup stays the
+  maintainer's to ask for.

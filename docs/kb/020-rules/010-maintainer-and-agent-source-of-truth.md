@@ -23,6 +23,9 @@ rather than repeating them:
   to run and check it. Its developer notes stay short and point here.
 - `scripts/kb.sh`, `docs/kb/housekeeping.mjs` and `docs/kb/graphify.mjs`
   explain themselves in their header comments.
+- `old/` (once scaffolding starts) holds the original `fastapi_receiver.py` as
+  reference-only material outside the Rust/web build and quality gate,
+  following `../trafficlights_firmware`'s `old/` convention.
 - `../trafficlights_firmware` is the sibling firmware repository. Read its
   knowledge base and `src/` when verifying the USB serial protocol or proposing
   new serial commands, and summarize the interface in "Firmware serial

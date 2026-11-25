@@ -55,12 +55,23 @@ radio group `146`, with colors `0` = green, `1` = orange, `2` = red:
 | Receiver -> Webapp | `RS,<id>,<color>` | `S` packet relayed once by an old MakeCode repeater |
 | Receiver -> Webapp | `RT,<id>,<color>` | `T` packet relayed once by an old MakeCode repeater (echo; ignored by teacher apps) |
 
-Important differences in the new firmware draft (`src/receiver.py`):
+Important differences between the old MakeCode receiver and the new firmware
+draft (`src/receiver.py`), verified directly from
+`../trafficlights_firmware/old/teacherReceiver.py` and
+`old/studentLightMicrobit.py` on `2026-11-25`:
 
-- The old MakeCode receiver forwarded any serial line blindly onto the radio.
-  The new draft forwards only well-formed `T,<table>,<color>` commands so
-  garbage cannot crash old MakeCode stations (which parse without bounds
-  checks).
+- The old MakeCode receiver triggers on `Delimiters.NEW_LINE` (`\n` required)
+  and forwards any serial line blindly onto radio group 146 (`radio.send_string`).
+  The old MakeCode student light splits on `","` and, when field 0 is `"T"` or
+  `"RT"`, reads fields 1 and 2 and indexes `colorList[colorIndex]` without
+  bounds checks. The web application must therefore never emit malformed `T,...`
+  lines or colors outside `0..2`.
+- An old MakeCode receiver does not understand `!` control commands (it would
+  forward `!get` to radio, where old stations and repeaters ignore it because
+  field 0 is not `T`, `RT` or `S`, and nothing replies). Sessions must operate
+  normally with no `!ok` reply when attached to an old MakeCode receiver.
+- The new firmware draft (`src/receiver.py`) forwards only well-formed
+  `T,<table>,<color>` commands to radio and handles `!` commands locally.
 - Neither old nor new stations send an immediate `S` acknowledgement when a
   `T` command changes their color; confirmation arrives on the station's next
   4–6 s heartbeat.

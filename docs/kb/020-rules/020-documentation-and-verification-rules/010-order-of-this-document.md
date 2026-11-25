@@ -22,8 +22,9 @@ directory of the same name holding its sections:
 3. **Licensing** (`030-licensing`): what license applies to what is here, where
    it came from, and what is undecided.
 4. **Reference** (`040-reference`): the existing `fastapi_receiver.py`
-   prototype, the USB serial interface with `trafficlights_firmware`, and the
-   graphify map.
+   prototype, the USB serial interface with `trafficlights_firmware`, the
+   graphify map, the `services_zamkorus` reference project and toolchain, and
+   the locked-in architecture and design.
 5. **Ongoing work** (`050-ongoing-work`): the work order and any active design
    or testing plans.
 6. **Future work** (`060-future-work`): recorded directions nobody has

@@ -1,14 +1,18 @@
 # trafficlights_webapp
 
-Teacher web application for the classroom traffic lights system. It connects over USB serial
-to the micro:bit V2 teacher receiver (whose firmware lives in the sibling repository
-`../trafficlights_firmware`), displays each table's light status (green, orange or red),
-tracks how long tables have been red, and lets the teacher set individual tables or reset all
-tables to green.
+Teacher web application for the classroom traffic lights system (hardware and
+legacy serial protocol originally introduced by
+[RolfHut/ClassroomIndicatorLights](https://github.com/RolfHut/ClassroomIndicatorLights)).
+It connects over USB serial to the micro:bit V2 teacher receiver (whose
+replacement firmware lives in the sibling repository
+`../trafficlights_firmware`), displays each table's light status (green, orange
+or red), tracks how long tables have been red, and lets the teacher set
+individual tables or reset all tables to green.
 
-**Status:** repository and knowledge base initialized around the starting
-`fastapi_receiver.py` prototype. Requirements, architecture, packaging, tests and next steps
-are waiting on the maintainer (see the Work order in the knowledge base).
+**Status:** requirements (`R1`–`R15`) and architecture settled (Rust Axum +
+Rust/WASM Web Serial bridge + React/Vite/Nub + WebSocket-first + SSD JSONL
+classroom statistics + Coolify distroless deploy). Ready to begin scaffolding
+(see Architecture and design and Work order in the knowledge base).
 
 ## Knowledge base
 
@@ -36,3 +40,11 @@ yet; `fastapi_receiver.py` currently documents running via `uvicorn fastapi_rece
     scripts/kb.sh        knowledge-base index, check and graph runner
     Makefile             gate and knowledge-base targets
     AGENTS.md            pointer-only agent entry point (`CLAUDE.md` and `CODEX.md` link here)
+    LICENSE              GNU Affero General Public License v3.0 (`AGPL-3.0-or-later`)
+    NOTICE.md            copyright, contributor roster, and provenance
+
+## License
+
+Licensed under **AGPL-3.0-or-later** (see [LICENSE](LICENSE) and
+[NOTICE.md](NOTICE.md)). Source repository:
+<https://github.com/NB-TUDelft/trafficlights_webapp>.
