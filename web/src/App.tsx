@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-const TITLE = "Classroom Traffic Lights";
-const TAGLINE = "Teacher console for the classroom traffic lights system.";
+import { Route, Routes } from "react-router";
+import { HomePage } from "@/pages/HomePage";
+import { NewSessionPage } from "@/pages/NewSessionPage";
+import { SessionPage } from "@/pages/SessionPage";
 
-/** The application shell: a placeholder until the pages arrive in the frontend slice. */
-export function App() {
+/** Route table without a router, so tests can wrap it in MemoryRouter. */
+export function AppRoutes() {
   return (
-    <main className="min-h-screen p-8">
-      <h1 className="text-3xl font-bold">{TITLE}</h1>
-      <p className="mt-2 text-gray-400">{TAGLINE}</p>
-    </main>
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/new" element={<NewSessionPage />} />
+      <Route path="/s/:id" element={<SessionPage />} />
+    </Routes>
   );
+}
+
+export function App() {
+  return <AppRoutes />;
 }

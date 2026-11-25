@@ -1,0 +1,288 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { Footer } from "@/components/Footer";
+import { ReconnectingSocket, websocketUrl } from "@/lib/socket";
+import { parseLobbyServerMsg } from "@/protocol/parse";
+import { initialLobbyState, lobbyReducer } from "@/protocol/reducers";
+import { saveCreatorToken } from "@/protocol/storage";
+import type { LobbyClientMsg, ServerBuildInfo } from "@/protocol/types";
+import {
+  DEFAULT_RANGE_END,
+  DEFAULT_RANGE_START,
+  isValidTableRange,
+  MAX_SESSION_NAME_CHARS,
+  MAX_TABLE_ID,
+  MIN_TABLE_ID,
+  normalizeSessionName,
+} from "@/protocol/types";
+import { isWebSerialSupported, requestMicrobitPort } from "@/serial/loader";
+import { bindPendingSerialPort, setPendingSerialPort } from "@/serial/pending";
+
+const PARSE_RADIX = 10;
+
+export interface NewSessionViewProps {
+  serverInfo: ServerBuildInfo | null;
+  name: string;
+  startValue: string;
+  endValue: string;
+  pin: string;
+  showAllPorts: boolean;
+  serialSupported: boolean;
+  hasPendingPort: boolean;
+  error: string | null;
+  submitting: boolean;
+  onNameChange: (value: string) => void;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+  onPinChange: (value: string) => void;
+  onShowAllChange: (value: boolean) => void;
+  onSelectPort: () => void;
+  onSubmit: () => void;
+}
+
+function SerialPicker(props: NewSessionViewProps) {
+  if (!props.serialSupported) {
+    return (
+      <p className="banner banner-warning">
+        Web Serial is not available here. Use a Chromium-based browser over HTTPS or localhost to
+        stream a micro:bit receiver. You can still create the session and connect later.
+      </p>
+    );
+  }
+  return (
+    <div className="field-group">
+      <button type="button" onClick={props.onSelectPort}>
+        Select micro:bit receiver
+      </button>
+      <label className="check-label">
+        <input
+          type="checkbox"
+          checked={props.showAllPorts}
+          onChange={(event) => props.onShowAllChange(event.target.checked)}
+        />{" "}
+        Show all USB serial ports
+      </label>
+      {props.hasPendingPort ? <p className="muted-text">Receiver selected and ready.</p> : null}
+    </div>
+  );
+}
+
+export function NewSessionView(props: NewSessionViewProps) {
+  return (
+    <main className="page">
+      <header className="hero">
+        <h1>Add session</h1>
+        <p>
+          Name your classroom session, choose its table range, and optionally pick the receiver now.
+        </p>
+      </header>
+      {props.error === null ? null : (
+        <div className="banner banner-error" role="alert">
+          {props.error}
+        </div>
+      )}
+      <form
+        className="control-card session-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          props.onSubmit();
+        }}
+      >
+        <label htmlFor="session-name">
+          Session name
+          <input
+            id="session-name"
+            type="text"
+            required={true}
+            maxLength={MAX_SESSION_NAME_CHARS}
+            value={props.name}
+            onChange={(event) => props.onNameChange(event.target.value)}
+          />
+        </label>
+        <div className="range-inputs">
+          <label htmlFor="new-start">
+            Start table
+            <input
+              id="new-start"
+              type="number"
+              min={MIN_TABLE_ID}
+              max={MAX_TABLE_ID}
+              value={props.startValue}
+              onChange={(event) => props.onStartChange(event.target.value)}
+            />
+          </label>
+          <label htmlFor="new-end">
+            End table
+            <input
+              id="new-end"
+              type="number"
+              min={MIN_TABLE_ID}
+              max={MAX_TABLE_ID}
+              value={props.endValue}
+              onChange={(event) => props.onEndChange(event.target.value)}
+            />
+          </label>
+        </div>
+        {props.serverInfo?.pin_required === true ? (
+          <label htmlFor="session-pin">
+            Session PIN
+            <input
+              id="session-pin"
+              type="password"
+              value={props.pin}
+              onChange={(event) => props.onPinChange(event.target.value)}
+            />
+          </label>
+        ) : null}
+        <SerialPicker {...props} />
+        <button type="submit" disabled={props.submitting}>
+          Create session
+        </button>
+        <Link to="/">Back to Lobby</Link>
+      </form>
+      <Footer serverInfo={props.serverInfo} />
+    </main>
+  );
+}
+
+function useLobbyCreateSocket() {
+  const [state, dispatch] = useReducer(lobbyReducer, initialLobbyState);
+  const socketRef = useRef<ReconnectingSocket | null>(null);
+  useEffect(() => {
+    const socket = new ReconnectingSocket(
+      websocketUrl("/ws/lobby"),
+      {
+        onMessage: (data) => {
+          const msg = parseLobbyServerMsg(data);
+          if (msg !== null) {
+            dispatch(msg);
+          }
+        },
+      },
+      { pingMessage: () => JSON.stringify({ type: "ping" }) },
+    );
+    socketRef.current = socket;
+    socket.connect();
+    return () => socket.close();
+  }, []);
+  return { state, socketRef };
+}
+
+interface SubmitArgs {
+  name: string;
+  startValue: string;
+  endValue: string;
+  pin: string;
+  send: (msg: LobbyClientMsg) => boolean;
+  setLocalError: (value: string | null) => void;
+  setSubmitting: (value: boolean) => void;
+}
+
+function submitCreateSession(args: SubmitArgs): void {
+  const normalized = normalizeSessionName(args.name);
+  const start = Number.parseInt(args.startValue, PARSE_RADIX);
+  const end = Number.parseInt(args.endValue, PARSE_RADIX);
+  if (normalized === null) {
+    args.setLocalError("Enter a session name of at most 80 characters.");
+    return;
+  }
+  if (!isValidTableRange(start, end)) {
+    args.setLocalError("Enter a valid table range (start <= end, 1-9999).");
+    return;
+  }
+  const msg: LobbyClientMsg = {
+    type: "create_session",
+    name: normalized,
+    start,
+    end,
+    pin: args.pin.length > 0 ? args.pin : null,
+  };
+  args.setLocalError(null);
+  args.setSubmitting(true);
+  if (!args.send(msg)) {
+    args.setSubmitting(false);
+    args.setLocalError("Not connected to the server yet. Try again in a moment.");
+  }
+}
+
+function usePortPicker(setLocalError: (value: string | null) => void) {
+  const [showAllPorts, setShowAllPorts] = useState(false);
+  const [hasPendingPort, setHasPendingPort] = useState(false);
+  const handleSelectPort = useCallback(async () => {
+    try {
+      const port = await requestMicrobitPort({ showAll: showAllPorts });
+      setPendingSerialPort(port);
+      setHasPendingPort(true);
+      setLocalError(null);
+    } catch {
+      setLocalError("No receiver was selected.");
+    }
+  }, [showAllPorts, setLocalError]);
+  return { showAllPorts, setShowAllPorts, hasPendingPort, handleSelectPort };
+}
+
+function useCreatedNavigation(created: { sessionId: string; creatorToken: string } | null): void {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (created === null) {
+      return;
+    }
+    saveCreatorToken(created.sessionId, created.creatorToken);
+    bindPendingSerialPort(created.sessionId);
+    navigate(`/s/${created.sessionId}`);
+  }, [created, navigate]);
+}
+
+function useCreateSessionForm(): NewSessionViewProps {
+  const { state, socketRef } = useLobbyCreateSocket();
+  const [name, setName] = useState("");
+  const [startValue, setStartValue] = useState(String(DEFAULT_RANGE_START));
+  const [endValue, setEndValue] = useState(String(DEFAULT_RANGE_END));
+  const [pin, setPin] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const picker = usePortPicker(setLocalError);
+  useCreatedNavigation(state.created);
+  useEffect(() => {
+    if (state.error !== null) {
+      setSubmitting(false);
+    }
+  }, [state.error]);
+  const handleSubmit = useCallback(() => {
+    submitCreateSession({
+      name,
+      startValue,
+      endValue,
+      pin,
+      send: (msg) => socketRef.current?.send(msg) ?? false,
+      setLocalError,
+      setSubmitting,
+    });
+  }, [name, startValue, endValue, pin, socketRef]);
+  return {
+    serverInfo: state.serverInfo,
+    name,
+    startValue,
+    endValue,
+    pin,
+    showAllPorts: picker.showAllPorts,
+    serialSupported: isWebSerialSupported(),
+    hasPendingPort: picker.hasPendingPort,
+    error: localError ?? state.error?.message ?? null,
+    submitting,
+    onNameChange: setName,
+    onStartChange: setStartValue,
+    onEndChange: setEndValue,
+    onPinChange: setPin,
+    onShowAllChange: picker.setShowAllPorts,
+    onSelectPort: picker.handleSelectPort,
+    onSubmit: handleSubmit,
+  };
+}
+
+export function NewSessionPage() {
+  const props = useCreateSessionForm();
+  return <NewSessionView {...props} />;
+}
