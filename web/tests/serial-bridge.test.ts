@@ -146,6 +146,9 @@ function createFakePort() {
     push: (text: string): void => {
       controller?.enqueue(encoder.encode(text));
     },
+    endStream: (): void => {
+      controller?.close();
+    },
   };
 }
 
@@ -242,5 +245,32 @@ describe("CreatorSerialBridge", () => {
     expect(h.fakeApi.lastFreed()).toBe(true);
     expect(h.statuses.at(-1)).toEqual({ connected: false, portLabel: null, firmware: null });
     expect(h.bridge.isConnected()).toBe(false);
+  });
+
+  it("resends current status with detected firmware after WS reconnect", async () => {
+    const h = makeHarness(60);
+    await h.bridge.connect(h.fakePort.port);
+    h.fakePort.push("!ok mode=receiver fw=draft-1\n");
+    await sleep(20);
+    const beforeCount = h.statuses.length;
+    h.bridge.resetDedup();
+    h.bridge.resendStatus();
+    expect(h.statuses.length).toBe(beforeCount + 1);
+    expect(h.statuses.at(-1)).toEqual({
+      connected: true,
+      portLabel: "micro:bit USB (0D28:0204)",
+      firmware: { kind: "new", mode: "receiver", version: "draft-1" },
+    });
+    await h.bridge.disconnect();
+  });
+
+  it("auto-disconnects when the serial read stream closes unexpectedly", async () => {
+    const h = makeHarness(60);
+    await h.bridge.connect(h.fakePort.port);
+    h.fakePort.endStream();
+    await sleep(30);
+    expect(h.bridge.isConnected()).toBe(false);
+    expect(h.statuses.at(-1)).toEqual({ connected: false, portLabel: null, firmware: null });
+    expect(h.fakeApi.lastFreed()).toBe(true);
   });
 });

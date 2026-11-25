@@ -30,9 +30,9 @@ export function formatDuration(durationMs: number): string {
     return `${totalSeconds}s`;
   }
   if (totalSeconds < SECONDS_PER_HOUR) {
-    const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
-    const seconds = totalSeconds % SECONDS_PER_MINUTE;
-    return `${minutes}m ${pad2(seconds)}s`;
+    const mins = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
+    const secs = totalSeconds % SECONDS_PER_MINUTE;
+    return `${mins}m ${pad2(secs)}s`;
   }
   const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR);
   const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);

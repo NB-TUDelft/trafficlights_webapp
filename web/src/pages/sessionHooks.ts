@@ -69,10 +69,17 @@ function handleServerData(
     bridgeRef.current?.enqueueCommand(msg.command);
     return;
   }
+  if (msg.type === "auth_ok" && msg.is_creator && bridgeRef.current?.isConnected()) {
+    bridgeRef.current.resetDedup();
+    bridgeRef.current.resendStatus();
+  }
+  if (msg.type === "snapshot" && bridgeRef.current?.isConnected()) {
+    bridgeRef.current.resetDedup();
+  }
   if (msg.type === "session_ended") {
     stopReconnectRef.current = true;
   }
-  if (msg.type === "error" && msg.code === "session_not_found") {
+  if (msg.type === "error" && (msg.code === "session_not_found" || msg.code === "superseded")) {
     stopReconnectRef.current = true;
   }
   dispatch(msg);
@@ -135,16 +142,16 @@ export function useSessionHandlers(args: HandlersArgs) {
   );
   const onToggleBeeps = useCallback(() => args.setBeepsEnabled((prev) => !prev), [args]);
   const onConnectSerial = useCallback(() => {
-    connectFromPicker(args);
+    connectFromPicker(args).catch(() => undefined);
   }, [args]);
   const onDisconnectSerial = useCallback(() => {
-    args.bridgeRef.current?.disconnect();
+    args.bridgeRef.current?.disconnect().catch(() => undefined);
   }, [args]);
   const onApplyRange = useCallback(() => applyRange(args), [args]);
   const onResetAll = useCallback(() => args.send({ type: "reset_all" }), [args]);
   const onRename = useCallback(() => applyRename(args), [args]);
   const onDownloadLog = useCallback(() => {
-    downloadLog(args);
+    downloadLog(args).catch(() => undefined);
   }, [args]);
   const onConfirmEnd = useCallback(() => {
     args.setConfirmEnd(false);

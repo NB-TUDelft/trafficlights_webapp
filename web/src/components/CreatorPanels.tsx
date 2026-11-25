@@ -74,7 +74,7 @@ export function TableRangeCard(props: RangeCardProps) {
       <h2 className="card-label">Table Range</h2>
       <div className="range-inputs">
         <label htmlFor="range-start">
-          Start
+          <span>Start</span>
           <input
             id="range-start"
             type="number"
@@ -85,7 +85,7 @@ export function TableRangeCard(props: RangeCardProps) {
           />
         </label>
         <label htmlFor="range-end">
-          End
+          <span>End</span>
           <input
             id="range-end"
             type="number"
@@ -161,7 +161,7 @@ export function SessionManagementCard(props: SessionManagementProps) {
     <article className="control-card">
       <h2 className="card-label">Session Management</h2>
       <label htmlFor="rename-session">
-        Session name
+        <span>Session name</span>
         <input
           id="rename-session"
           type="text"

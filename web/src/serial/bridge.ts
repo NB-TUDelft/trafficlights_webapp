@@ -3,8 +3,15 @@
 // paced writes, firmware probing, Wake Lock, and unload warning.
 
 import { parseSerialEvents } from "@/protocol/parse";
-import type { SerialCommand } from "@/protocol/types";
+import type { FirmwareInfo, SerialCommand } from "@/protocol/types";
 import { delay, describePort, loadWasmSerialApi } from "./loader";
+import {
+  acquireWakeLock,
+  closeSerialPort,
+  freeWasmBridge,
+  releaseSerialStreams,
+  releaseWakeLock,
+} from "./resources";
 import type {
   SerialBridgeCallbacks,
   SerialBridgeOptions,
@@ -13,7 +20,6 @@ import type {
   WasmBridgeLike,
   WasmSerialApi,
 } from "./types";
-import { getWakeLock } from "./types";
 
 export const WAKE_DELAY_MS = 50;
 export const PROBE_TIMEOUT_MS = 1000;
@@ -34,6 +40,7 @@ export class CreatorSerialBridge {
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private connected = false;
   private portLabel: string | null = null;
+  private lastFirmware: FirmwareInfo | null = null;
   private firmwareResolved = false;
   private probeTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeLock: WakeLockSentinelLike | null = null;
@@ -50,6 +57,21 @@ export class CreatorSerialBridge {
     return this.connected;
   }
 
+  resetDedup(): void {
+    this.bridge?.reset_dedup();
+  }
+
+  resendStatus(): void {
+    if (!this.connected) {
+      return;
+    }
+    this.callbacks.onStatus({
+      connected: true,
+      portLabel: this.portLabel,
+      firmware: this.lastFirmware,
+    });
+  }
+
   async connect(port: SerialPortLike): Promise<void> {
     if (this.connected) {
       return;
@@ -61,11 +83,12 @@ export class CreatorSerialBridge {
     this.acquireStreams(port);
     this.connected = true;
     this.portLabel = describePort(port);
+    this.lastFirmware = null;
     this.firmwareResolved = false;
-    await this.requestWakeLock();
+    this.wakeLock = await acquireWakeLock();
     this.addUnloadWarning();
     this.callbacks.onStatus({ connected: true, portLabel: this.portLabel, firmware: null });
-    this.readLoop();
+    this.readLoop().catch(() => undefined);
     await this.writeText(this.api.format_wake_up());
     await delay(this.options.wakeDelayMs ?? WAKE_DELAY_MS);
     await this.writeText(this.api.format_probe_firmware());
@@ -78,7 +101,7 @@ export class CreatorSerialBridge {
     }
     const line = this.formatCommand(command);
     if (line !== null) {
-      this.writeText(line);
+      this.writeText(line).catch(() => undefined);
     }
   }
 
@@ -89,11 +112,18 @@ export class CreatorSerialBridge {
     this.connected = false;
     this.clearProbeTimer();
     this.removeUnloadWarning();
-    await this.releaseWakeLock();
-    await this.releaseStreams();
-    await this.closePort();
-    this.freeBridge();
+    const { wakeLock, reader, writer, port, bridge } = this;
+    this.wakeLock = null;
+    this.reader = null;
+    this.writer = null;
+    this.port = null;
+    this.bridge = null;
     this.portLabel = null;
+    this.lastFirmware = null;
+    await releaseWakeLock(wakeLock);
+    await releaseSerialStreams(reader, writer);
+    await closeSerialPort(port);
+    freeWasmBridge(bridge);
     this.callbacks.onStatus({ connected: false, portLabel: null, firmware: null });
   }
 
@@ -112,10 +142,11 @@ export class CreatorSerialBridge {
         return;
       }
       this.firmwareResolved = true;
+      this.lastFirmware = { kind: "legacy" };
       this.callbacks.onStatus({
         connected: true,
         portLabel: this.portLabel,
-        firmware: { kind: "legacy" },
+        firmware: this.lastFirmware,
       });
     }, timeoutMs);
   }
@@ -148,21 +179,27 @@ export class CreatorSerialBridge {
     if (!this.connected || this.reader === null) {
       return;
     }
+    let endedUnexpectedly = false;
     try {
       const result = await this.reader.read();
       if (result.done) {
-        return;
-      }
-      if (result.value !== undefined) {
+        endedUnexpectedly = true;
+      } else if (result.value !== undefined) {
         this.handleChunk(result.value);
       }
     } catch (error) {
       if (this.connected) {
         this.reportError(error);
+        endedUnexpectedly = true;
+      }
+    }
+    if (endedUnexpectedly) {
+      if (this.connected) {
+        await this.disconnect();
       }
       return;
     }
-    return this.readLoop();
+    await this.readLoop();
   }
 
   private handleChunk(chunk: Uint8Array): void {
@@ -180,6 +217,7 @@ export class CreatorSerialBridge {
       this.callbacks.onStationReport(event.table, event.color);
     } else if (event.type === "firmware_detected") {
       this.firmwareResolved = true;
+      this.lastFirmware = event.info;
       this.clearProbeTimer();
       this.callbacks.onStatus({
         connected: true,
@@ -219,70 +257,12 @@ export class CreatorSerialBridge {
     }
   }
 
-  private async requestWakeLock(): Promise<void> {
-    try {
-      const wakeLock = getWakeLock();
-      if (wakeLock !== null) {
-        this.wakeLock = await wakeLock.request("screen");
-      }
-    } catch {
-      this.wakeLock = null;
-    }
-  }
-
-  private async releaseWakeLock(): Promise<void> {
-    try {
-      await this.wakeLock?.release();
-    } catch {
-      // Wake lock release is best-effort.
-    }
-    this.wakeLock = null;
-  }
-
   private addUnloadWarning(): void {
     globalThis.window?.addEventListener("beforeunload", this.beforeUnloadHandler);
   }
 
   private removeUnloadWarning(): void {
     globalThis.window?.removeEventListener("beforeunload", this.beforeUnloadHandler);
-  }
-
-  private async releaseStreams(): Promise<void> {
-    try {
-      await this.reader?.cancel();
-    } catch {
-      // Ignore cancel failures during teardown.
-    }
-    try {
-      this.reader?.releaseLock();
-    } catch {
-      // Ignore lock failures during teardown.
-    }
-    try {
-      this.writer?.releaseLock();
-    } catch {
-      // Ignore lock failures during teardown.
-    }
-    this.reader = null;
-    this.writer = null;
-  }
-
-  private async closePort(): Promise<void> {
-    try {
-      await this.port?.close();
-    } catch {
-      // Ignore close failures during teardown.
-    }
-    this.port = null;
-  }
-
-  private freeBridge(): void {
-    try {
-      this.bridge?.free();
-    } catch {
-      // Ignore free failures during teardown.
-    }
-    this.bridge = null;
   }
 
   private reportError(error: unknown): void {

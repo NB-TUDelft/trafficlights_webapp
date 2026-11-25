@@ -91,7 +91,7 @@ export function NewSessionView(props: NewSessionViewProps) {
         }}
       >
         <label htmlFor="session-name">
-          Session name
+          <span>Session name</span>
           <input
             id="session-name"
             type="text"
@@ -103,7 +103,7 @@ export function NewSessionView(props: NewSessionViewProps) {
         </label>
         <div className="range-inputs">
           <label htmlFor="new-start">
-            Start table
+            <span>Start table</span>
             <input
               id="new-start"
               type="number"
@@ -114,7 +114,7 @@ export function NewSessionView(props: NewSessionViewProps) {
             />
           </label>
           <label htmlFor="new-end">
-            End table
+            <span>End table</span>
             <input
               id="new-end"
               type="number"
@@ -127,7 +127,7 @@ export function NewSessionView(props: NewSessionViewProps) {
         </div>
         {props.serverInfo?.pin_required === true ? (
           <label htmlFor="session-pin">
-            Session PIN
+            <span>Session PIN</span>
             <input
               id="session-pin"
               type="password"
@@ -231,7 +231,7 @@ function useCreatedNavigation(created: { sessionId: string; creatorToken: string
     }
     saveCreatorToken(created.sessionId, created.creatorToken);
     bindPendingSerialPort(created.sessionId);
-    navigate(`/s/${created.sessionId}`);
+    Promise.resolve(navigate(`/s/${created.sessionId}`)).catch(() => undefined);
   }, [created, navigate]);
 }
 

@@ -54,7 +54,7 @@ export class ReconnectingSocket {
   }
 
   send(payload: unknown): boolean {
-    if (this.socket === null || this.socket.readyState !== WebSocket.OPEN) {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
       return false;
     }
     this.socket.send(typeof payload === "string" ? payload : JSON.stringify(payload));

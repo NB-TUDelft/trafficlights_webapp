@@ -82,7 +82,7 @@ export function useSerialBridge(
   );
   useEffect(
     () => () => {
-      bridgeRef.current?.disconnect();
+      bridgeRef.current?.disconnect().catch(() => undefined);
     },
     [],
   );
@@ -100,7 +100,7 @@ export function usePendingPort(
     }
     const port = takePendingSerialPort(sessionId);
     if (port !== null) {
-      connectToPort(port);
+      connectToPort(port).catch(() => undefined);
     }
   }, [isCreator, sessionId, connectToPort]);
 }
