@@ -11,11 +11,11 @@ from a Rust Axum server, tracks how long tables have been red, and lets
 teachers set individual tables, reset all tables to green, and download
 classroom statistics as `.jsonl`.
 
-**Status:** v1 implementation in progress — workspace scaffold (`S1`), custom
-SVG icon (`S3`), and classroom statistics `.jsonl` schema (`S4`) integrated;
-protocol/WASM (`S2`), server (`S5`), React UI (`S6`), and Coolify container
-(`S7`) next (see Architecture and design and v1 implementation register in the
-knowledge base).
+**Status:** v1 implementation complete and verified (`make gate`, `make sonar`
+quality gate `OK`, 47.5 MB distroless Docker image at 9.2 MiB RSS, headless
+Brave E2E). Ready for local preview (`make dev` -> `http://127.0.0.1:3000`),
+real micro:bit V2 USB verification, and Coolify deployment (see Work order and
+History in the knowledge base).
 
 ## Knowledge base
 
