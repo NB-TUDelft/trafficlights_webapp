@@ -5,7 +5,9 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // The Rust server (`cargo run -p trafficlights-server`) listens here by default.
-const backend = "http://127.0.0.1:3000";
+const DEFAULT_DEV_PORT = 5173;
+const backend = process.env.VITE_BACKEND_URL ?? "http://127.0.0.1:3000";
+const devPort = Number(process.env.VITE_PORT ?? DEFAULT_DEV_PORT);
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -15,7 +17,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    host: "127.0.0.1",
+    port: devPort,
     proxy: {
       "/api": backend,
       // WebSockets: `/ws/lobby` and `/ws/sessions/{id}`.

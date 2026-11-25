@@ -17,6 +17,15 @@ always_read: true
   `lint:strict`, `test`, `build`), and runs the Rust workspace checks
   (`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
   warnings`, `cargo test --workspace`).
+- Run `make sonar` (`scripts/sonar.sh scan`) after larger slices to generate
+  fresh Vitest (`web/coverage/lcov.info`) and Rust (`coverage/rust-lcov.info`)
+  coverage reports, upload the scan using `sonar-project.properties`, and poll
+  the SonarQube quality gate until it returns `OK`. Server URL and token live
+  only in `/opt/sonar-scanner/conf/sonar-scanner.properties` or environment
+  variables, never in this repository.
+- Preview locally with `make dev` (Rust server on `127.0.0.1:3000` + Vite HMR
+  on `http://127.0.0.1:5173`) or `make dev-embedded` (single embedded binary on
+  `http://127.0.0.1:3000`).
 - When changing serial-handling code or browser UI, record what was tested
   (unit/integration tests, browser checks, or a real micro:bit receiver over
   USB serial) and what was not tested. Keep in mind that only one program can

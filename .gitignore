@@ -20,3 +20,9 @@ coverage/
 # graphify code-graph output: regenerable local tool output (`make kb-graph`).
 graphify-out/
 /.claude/settings.local.json
+
+# SonarQube scanner work directory and local environment secrets.
+/.scannerwork/
+.env
+.env.*
+!.env.example
