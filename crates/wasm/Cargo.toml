@@ -14,5 +14,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 trafficlights-proto = { path = "../proto" }
+serde.workspace = true
 wasm-bindgen.workspace = true
 serde-wasm-bindgen.workspace = true

@@ -955,6 +955,7 @@ dependencies = [
 name = "trafficlights-wasm"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde-wasm-bindgen",
  "trafficlights-proto",
  "wasm-bindgen",
