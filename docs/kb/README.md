@@ -33,7 +33,9 @@ rules.
 5. [Order of this document](020-rules/020-documentation-and-verification-rules/010-order-of-this-document.md)
 6. [Commits and branches](020-rules/030-commits-and-branches.md)
 7. [Licensing](030-licensing/010-licensing.md)
-8. [Work order](050-ongoing-work/010-work-order.md)
+8. [The existing FastAPI receiver](040-reference/010-the-existing-fastapi-receiver.md)
+9. [Firmware serial interface](040-reference/020-firmware-serial-interface.md)
+10. [Work order](050-ongoing-work/010-work-order.md)
 
 **Mission**: why the project exists, how it relates to trafficlights_firmware, and what it has to stay compatible with.
 
@@ -54,6 +56,8 @@ rules.
 
 **Reference**: standing guidance to read when a task touches its area.
 
+- [The existing FastAPI receiver](040-reference/010-the-existing-fastapi-receiver.md) (*always read*) — What the starting `fastapi_receiver.py` (1,303 lines, commit `7fe9e60`) does, read from its code on `2026-11-25` (not yet executed): runtime settings, `TableState`, `WebsocketManager`, `SerialReceiver` (115200 baud, auto-detect, wake-up newline, `T,<table>,<color>` / `T,-1,0`, three-field parser ignoring `RT`), HTTP/WebSocket endpoints, embedded HTML/CSS/JS teacher console, and defects or quirks observed in the baseline code.
+- [Firmware serial interface](040-reference/020-firmware-serial-interface.md) (*always read*) — The USB serial contract with `../trafficlights_firmware` (read at firmware commit `61786da` on `2026-11-25`): 115200 baud micro:bit V2 CDC serial, buffer and line-ending limits, the legacy `T`/`S`/`RS`/`RT` text protocol, the always-listening `!get`/`!set`/`!clear`/`!restart` control commands, compatibility guarantees, and what the firmware has not built yet.
 - [Graphify Map](040-reference/030-graphify-map.md) — How `make kb-graph` (`scripts/kb.sh graph`) builds the graphify code and knowledge-base graph: `graphify update .` (offline), the `contains` and `mentions` edges `docs/kb/housekeeping.mjs --graph` adds, re-clustering, the tree; why `graphify-out/` is gitignored; what it indexes here.
 
 **Ongoing work**: what is in progress, in the order to take it up.
@@ -65,6 +69,6 @@ rules.
 
 **History**: dated records of finished work, oldest first.
 
-- [Repository and knowledge base initialized (`2026-11-25`)](070-history/010-repository-and-knowledge-base-initialized.md) — Record (`2026-11-25`): git repository initialized on `main` with the untouched `fastapi_receiver.py` (`7fe9e60`), repository entry points and knowledge-base tooling copied from `../trafficlights_firmware`, and the initial seven-group knowledge base created and verified with `make gate`.
+- [Repository and knowledge base initialized (`2026-11-25`)](070-history/010-repository-and-knowledge-base-initialized.md) — Record (`2026-11-25`): git repository initialized on `main` with the untouched `fastapi_receiver.py` (`7fe9e60`), repository entry points and knowledge-base tooling copied from `../trafficlights_firmware`, the initial seven-group knowledge base created (including standing Reference for `fastapi_receiver.py` and the `trafficlights_firmware` serial interface), and verified with `make gate` and `make kb-graph`.
 
 <!-- kb-index:end -->

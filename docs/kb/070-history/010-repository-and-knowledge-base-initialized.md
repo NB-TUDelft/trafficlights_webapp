@@ -2,8 +2,10 @@
 summary: >-
   Record (`2026-11-25`): git repository initialized on `main` with the
   untouched `fastapi_receiver.py` (`7fe9e60`), repository entry points and
-  knowledge-base tooling copied from `../trafficlights_firmware`, and the
-  initial seven-group knowledge base created and verified with `make gate`.
+  knowledge-base tooling copied from `../trafficlights_firmware`, the initial
+  seven-group knowledge base created (including standing Reference for
+  `fastapi_receiver.py` and the `trafficlights_firmware` serial interface), and
+  verified with `make gate` and `make kb-graph`.
 ---
 
 # Repository and knowledge base initialized (`2026-11-25`)
@@ -35,8 +37,14 @@ Created the same layout used in `../trafficlights_firmware`:
 
 ## Checks run and left open
 
-- `scripts/kb.sh index` (`make kb`) generated `docs/kb/README.md` and
-  `make gate` (`scripts/kb.sh check`) passed.
+- `scripts/kb.sh index` (`make kb`) generated `docs/kb/README.md` (7 groups,
+  10 always-read sections) and `make gate` (`scripts/kb.sh check`) passed.
+- `make kb-graph` built the offline code and knowledge-base graph
+  (`graphify-out/`, gitignored): 158 nodes, 287 edges (including 20 `contains`
+  and 44 `mentions` edges from the knowledge base), 16 communities.
+- Standing Reference sections were added for `fastapi_receiver.py` (read in
+  full, 1,303 lines) and the `../trafficlights_firmware` USB serial interface
+  (read at firmware commit `61786da`).
 - Application code (`fastapi_receiver.py`) was read and inspected statically
   only; no Python virtual environment, server run, browser test or micro:bit
   serial test was executed yet, awaiting the maintainer's next steps.
