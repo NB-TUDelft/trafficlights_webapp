@@ -5,6 +5,18 @@ node_modules/
 dist/
 build/
 
+# Rust build output.
+target/
+
+# Frontend: dependencies, build output, generated wasm-bindgen glue
+# (`scripts/build-wasm.sh`), and coverage reports.
+web/node_modules/
+web/dist/
+web/src/wasm/
+web/coverage/
+coverage/
+*.tsbuildinfo
+
 # graphify code-graph output: regenerable local tool output (`make kb-graph`).
 graphify-out/
 /.claude/settings.local.json

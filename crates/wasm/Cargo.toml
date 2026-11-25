@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "trafficlights-wasm"
+description = "Browser WebAssembly bridge for trafficlights-webapp (wasm-bindgen)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+trafficlights-proto = { path = "../proto" }
+wasm-bindgen.workspace = true
+serde-wasm-bindgen.workspace = true
