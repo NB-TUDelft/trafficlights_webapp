@@ -1,67 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Funny traffic light with a radio antenna">
-  <title>Classroom Traffic Lights</title>
+<svg viewBox="0 0 128 128" aria-label="Funny traffic light with a radio antenna" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="gr" cx="40%" cy="35%" r="75%">
-      <stop offset="0" stop-color="#ff8f8f"/>
-      <stop offset="1" stop-color="#ff4d4d"/>
+    <radialGradient id="prefix__a" cx="60.64" cy="43.96" r="25.2" fx="60.64" fy="43.96" gradientUnits="userSpaceOnUse"
+      gradientTransform="matrix(.9 0 0 .9 6.4 1.9)">
+      <stop offset="0" stop-color="#ff8f8f" />
+      <stop offset="1" stop-color="#ff4d4d" />
     </radialGradient>
-    <radialGradient id="go" cx="40%" cy="35%" r="75%">
-      <stop offset="0" stop-color="#ffc979"/>
-      <stop offset="1" stop-color="#ffa534"/>
+    <radialGradient id="prefix__b" cx="60.64" cy="74.96" r="25.2" fx="60.64" fy="74.96" gradientUnits="userSpaceOnUse"
+      gradientTransform="matrix(.9 0 0 .9 6.4 3.5)">
+      <stop offset="0" stop-color="#ffc979" />
+      <stop offset="1" stop-color="#ffa534" />
     </radialGradient>
-    <radialGradient id="gg" cx="40%" cy="35%" r="75%">
-      <stop offset="0" stop-color="#9bf0a9"/>
-      <stop offset="1" stop-color="#57d86b"/>
+    <radialGradient id="prefix__c" cx="60.64" cy="105.96" r="25.2" fx="60.64" fy="105.96" gradientUnits="userSpaceOnUse"
+      gradientTransform="matrix(.9 0 0 .9 6.4 5.098)">
+      <stop offset="0" stop-color="#9bf0a9" />
+      <stop offset="1" stop-color="#57d86b" />
     </radialGradient>
   </defs>
-
-  <!-- radio antenna with signal arcs -->
-  <g fill="none" stroke-linecap="round">
-    <path d="M64 24V11" stroke="#94a3b8" stroke-width="3.5"/>
-    <path d="M56 4.2Q52.5 8 56 11.8M72 4.2Q75.5 8 72 11.8" stroke="#38bdf8" stroke-width="2.6"/>
-    <path d="M50.5 2.9Q45 8 50.5 13.1M77.5 2.9Q83 8 77.5 13.1" stroke="#7dd3fc" stroke-width="2.4" opacity="0.85"/>
+  <path d="M64 23.99V10.996" stroke="#94a3b8" stroke-width="3.499" fill="none" stroke-linecap="round" />
+  <path d="M56 4.198q-3.5 3.799 0 7.597m16-7.597q3.5 3.799 0 7.597" stroke="#38bdf8" stroke-width="2.599" fill="none"
+    stroke-linecap="round" />
+  <path d="M50.5 2.899q-5.5 5.098 0 10.196m27-10.196q5.5 5.098 0 10.196" stroke="#7dd3fc" stroke-width="2.4"
+    opacity=".85" fill="none" stroke-linecap="round" />
+  <ellipse cx="64.001" cy="7.997" fill="#ff4d4d" stroke="#fff" stroke-width="1.6" rx="4.6" ry="4.598" />
+  <rect x="33.364" y="19.164" width="61.273" height="106.942" rx="15.318" fill="#0f172a" stroke="#cbd5e1"
+    stroke-width="3.186" />
+  <rect x="37.798" y="24.82" width="52.405" height="95.631" rx="11.287" fill="none" stroke="#334155"
+    stroke-width="1.366" />
+  <g>
+    <ellipse cx="64.001" cy="41.613" fill="#ff4d4d" opacity=".25" rx="15" ry="14.994" />
+    <ellipse cx="64.001" cy="41.613" fill="url(#prefix__a)" stroke="#fff" stroke-width="1.263" rx="12.632"
+      ry="12.626" />
+    <ellipse cx="58.869" cy="39.64" fill="#fff" stroke="#3b0d12" stroke-width="1.105" rx="4.105" ry="4.104" />
+    <ellipse cx="69.132" cy="39.64" fill="#fff" stroke="#3b0d12" stroke-width="1.105" rx="4.105" ry="4.104" />
+    <circle cx="59.264" cy="40.272" fill="#3b0d12" r="1.342" />
+    <circle cx="68.738" cy="40.272" fill="#3b0d12" r="1.342" />
+    <path d="M54.922 36.09l5.92-3.157m12.238 3.156l-5.921-3.156" stroke="#3b0d12" stroke-width="1.736"
+      stroke-linecap="round" />
+    <ellipse cx="64.001" cy="48.321" rx="3.316" ry="2.683" fill="#3b0d12" />
+    <path d="M62.422 47.532h3.158" stroke="#fff" stroke-width=".947" stroke-linecap="round" />
+    <path d="M74.659 32.538q2.763 3.946 0 6.313-2.764-2.367 0-6.313z" fill="#7dd3fc" stroke="#0369a1"
+      stroke-width=".631" />
   </g>
-  <circle cx="64" cy="8" r="4.6" fill="#ff4d4d" stroke="#fff" stroke-width="1.6"/>
-
-  <!-- housing -->
-  <rect x="26" y="22" width="76" height="104" rx="19" fill="#0f172a" stroke="#cbd5e1" stroke-width="3.5"/>
-  <rect x="31.5" y="27.5" width="65" height="93" rx="14" fill="none" stroke="#334155" stroke-width="1.5"/>
-  <path d="M38 36Q38 29 45 29" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-
-  <!-- RED: panicked -->
-  <g transform="translate(64 46) scale(.9) translate(-64 -49)">
-    <circle cx="64" cy="49" r="19" fill="#ff4d4d" opacity="0.25"/>
-    <circle cx="64" cy="49" r="16" fill="url(#gr)" stroke="#fff" stroke-width="1.6"/>
-    <circle cx="57.5" cy="46.5" r="5.2" fill="#fff" stroke="#3b0d12" stroke-width="1.4"/>
-    <circle cx="70.5" cy="46.5" r="5.2" fill="#fff" stroke="#3b0d12" stroke-width="1.4"/>
-    <circle cx="58" cy="47.3" r="1.7" fill="#3b0d12"/>
-    <circle cx="70" cy="47.3" r="1.7" fill="#3b0d12"/>
-    <path d="M52.5 42L60 38M75.5 42L68 38" stroke="#3b0d12" stroke-width="2.2" stroke-linecap="round"/>
-    <ellipse cx="64" cy="57.5" rx="4.2" ry="3.4" fill="#3b0d12"/>
-    <path d="M62 56.5h4" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>
-    <path d="M77.5 37.5Q81 42.5 77.5 45.5Q74 42.5 77.5 37.5Z" fill="#7dd3fc" stroke="#0369a1" stroke-width="0.8"/>
+  <g>
+    <ellipse cx="64.001" cy="72.635" fill="#ffa534" opacity=".25" rx="15" ry="14.994" />
+    <ellipse cx="64.001" cy="72.635" fill="url(#prefix__b)" stroke="#fff" stroke-width="1.263" rx="12.632"
+      ry="12.626" />
+    <ellipse cx="58.869" cy="71.845" fill="#fff" stroke="#3a2005" stroke-width="1.105" rx="3.474" ry="3.472" />
+    <ellipse cx="59.895" cy="72.003" fill="#3a2005" rx="1.421" ry="1.42" />
+    <path d="M66.37 72.24h5.92" stroke="#3a2005" stroke-width="2.052" stroke-linecap="round" />
+    <path d="M54.922 66.716q3.947-2.762 7.5 0" fill="none" stroke="#3a2005" stroke-width="1.736"
+      stroke-linecap="round" />
+    <path d="M66.37 67.9l5.92-1.973" stroke="#3a2005" stroke-width="1.736" stroke-linecap="round" />
+    <path d="M58.08 79.342q2.763-1.973 5.131 0 2.369 1.973 5.527-.394" fill="none" stroke="#3a2005" stroke-width="1.736"
+      stroke-linecap="round" />
   </g>
-
-  <!-- ORANGE: puzzled "hmm?" -->
-  <g transform="translate(64 75.5) scale(.9) translate(-64 -80)">
-    <circle cx="64" cy="80" r="19" fill="#ffa534" opacity="0.25"/>
-    <circle cx="64" cy="80" r="16" fill="url(#go)" stroke="#fff" stroke-width="1.6"/>
-    <circle cx="57.5" cy="79" r="4.4" fill="#fff" stroke="#3a2005" stroke-width="1.4"/>
-    <circle cx="58.8" cy="79.2" r="1.8" fill="#3a2005"/>
-    <path d="M67 79.5h7.5" stroke="#3a2005" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M52.5 72.5Q57.5 69 62 72.5" fill="none" stroke="#3a2005" stroke-width="2.2" stroke-linecap="round"/>
-    <path d="M67 74L74.5 71.5" stroke="#3a2005" stroke-width="2.2" stroke-linecap="round"/>
-    <path d="M56.5 88.5Q60 86 63 88.5T70 88" fill="none" stroke="#3a2005" stroke-width="2.2" stroke-linecap="round"/>
-  </g>
-
-  <!-- GREEN: chill smile -->
-  <g transform="translate(64 105) scale(.9) translate(-64 -111)">
-    <circle cx="64" cy="111" r="19" fill="#57d86b" opacity="0.25"/>
-    <circle cx="64" cy="111" r="16" fill="url(#gg)" stroke="#fff" stroke-width="1.6"/>
-    <path d="M52.5 109Q57.5 103.5 62.5 109M65.5 109Q70.5 103.5 75.5 109" fill="none" stroke="#0b3a16" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M54 114Q64 125 74 114Z" fill="#0b3a16" stroke="#0b3a16" stroke-width="1.6" stroke-linejoin="round"/>
-    <path d="M58.5 118.2Q64 121 69.5 118.2Q64 116 58.5 118.2Z" fill="#ff8fa3"/>
-    <circle cx="52.5" cy="114.5" r="2.2" fill="#ff8fa3" opacity="0.7"/>
-    <circle cx="75.5" cy="114.5" r="2.2" fill="#ff8fa3" opacity="0.7"/>
+  <g>
+    <ellipse cx="64.001" cy="103.656" fill="#57d86b" opacity=".25" rx="15" ry="14.994" />
+    <ellipse cx="64.001" cy="103.656" fill="url(#prefix__c)" stroke="#fff" stroke-width="1.263" rx="12.632"
+      ry="12.626" />
+    <path d="M54.922 102.077q3.947-4.34 7.895 0m2.368 0q3.947-4.34 7.895 0" fill="none" stroke="#0b3a16"
+      stroke-width="1.894" stroke-linecap="round" />
+    <path d="M56.106 106.023q7.895 8.68 15.79 0z" fill="#0b3a16" stroke="#0b3a16" stroke-width="1.263"
+      stroke-linejoin="round" />
+    <path d="M59.659 109.338q4.342 2.21 8.684 0-4.342-1.737-8.684 0z" fill="#ff8fa3" />
+    <ellipse cx="54.922" cy="106.418" fill="#ff8fa3" opacity=".7" rx="1.737" ry="1.736" />
+    <ellipse cx="73.08" cy="106.418" fill="#ff8fa3" opacity=".7" rx="1.737" ry="1.736" />
   </g>
 </svg>
