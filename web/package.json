@@ -1,0 +1,52 @@
+{
+  "name": "trafficlights-web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "format": "biome format .",
+    "format:fix": "biome format --write .",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "lint:strict": "biome check --config-path biome.strict.jsonc --error-on-warnings .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "ci": "biome ci . && nub run typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text"
+  },
+  "dependencies": {
+    "lucide-react": "^1.28.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router": "^7.9.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "26.1.2",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "tailwindcss": "^4.3.3",
+    "typescript": "7.0.2",
+    "vite": "^7.1.0",
+    "vitest": "^4.1.10"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "nub",
+      "version": ">=0.9.7",
+      "onFail": "ignore"
+    }
+  },
+  "allowScripts": {
+    "esbuild": true
+  }
+}

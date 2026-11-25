@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.9/schema.json",
+
+  // The strict target, applied to the whole tree from day one. `biome.json` is
+  // the everyday config; this one inherits its structure (including the
+  // `!dist` and `!src/wasm` exclusions, so generated wasm-bindgen glue is never
+  // linted) and promotes rule groups to `error`.
+  "extends": ["./biome.json"],
+
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": "error",
+      "complexity": "error",
+      "performance": "error",
+      "suspicious": "error",
+
+      "correctness": {
+        // Vite and Vitest config files are Node config.
+        "noNodejsModules": "off"
+      },
+
+      "security": {
+        // Entropy heuristic; hits here are Tailwind utility strings.
+        "noSecrets": "off"
+      },
+
+      "style": {
+        // Vite entry/config files may default-export.
+        "noDefaultExport": "off",
+        // Short literals (symbols, separators) in JSX are fine.
+        "noJsxLiterals": "off",
+        // Conditional rendering reads better as ternaries.
+        "noTernary": "off",
+        "noProcessEnv": "off",
+        // Components sit beside their variants and hooks; forcing every export
+        // to the file end fights that structure.
+        "useExportsLast": "off",
+        "useNamingConvention": "off",
+        "useComponentExportOnlyModules": "off",
+        "useFilenamingConvention": "off"
+      }
+    }
+  },
+
+  "overrides": [
+    {
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "complexity": { "noExcessiveLinesPerFunction": "off" },
+          "performance": { "useTopLevelRegex": "off" },
+          "style": { "noMagicNumbers": "off" }
+        }
+      }
+    }
+  ]
+}
