@@ -1,116 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-/* Shared brand mark, inside-session navbar, add-session layout, and Longest On Red scroll body. */
-
-.brand-mark {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.brand-mark img {
-  max-width: none;
-  display: block;
-}
-
-.brand-mark-lg {
-  width: 48px;
-  height: 78px;
-}
-
-.brand-mark-lg img {
-  width: 78px;
-  height: 78px;
-}
-
-.brand-mark-nav {
-  width: 36px;
-  height: 58px;
-}
-
-.brand-mark-nav img {
-  width: 58px;
-  height: 58px;
-}
-
-.session-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 0.85rem 1.35rem;
-}
-
-.session-nav-identity {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-width: 0;
-  flex: 1 1 280px;
-}
-
-.lobby-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-height: 44px;
-  padding: 0.25rem 0.85rem 0.25rem 0.45rem;
-  border-radius: 14px;
-  background: rgb(22 33 58);
-  border: 1px solid rgb(148 163 184 / 22%);
-  color: rgb(226 232 240);
-  font-size: 0.92rem;
-  font-weight: 600;
-  text-decoration: none;
-  flex-shrink: 0;
-  transition-property: background-color, border-color, color;
-  transition-duration: 150ms;
-  transition-timing-function: ease-out;
-}
-
-.lobby-link:hover {
-  background: rgb(28 45 76);
-  border-color: rgb(41 182 246 / 55%);
-  color: var(--text);
-}
-
-.lobby-link-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.session-nav-divider {
-  width: 1px;
-  height: 2.35rem;
-  background: rgb(148 163 184 / 20%);
-  flex-shrink: 0;
-}
-
-.session-title {
-  margin: 0;
-  font-size: clamp(1.3rem, 2.2vw, 1.65rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  color: var(--text);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-nav-metrics {
-  display: flex;
-  align-items: center;
-  gap: 1.65rem;
-  flex-wrap: wrap;
-}
+/* Longest On Red scroll body, add-session layout, and narrow session cards.
+   The shared page header lives in header.css. */
 
 /* Fixed-height scrollable body inside Longest On Red prevents the table grid
    from shifting downward as red tables appear or disappear. */
@@ -174,11 +64,6 @@
 }
 
 @media (max-width: 760px) {
-  .lobby-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .session-card {
     flex-direction: column;
     align-items: stretch;
@@ -188,26 +73,5 @@
     justify-content: space-between;
     padding-top: 0.65rem;
     border-top: 1px solid rgb(148 163 184 / 12%);
-  }
-
-  .session-nav-divider {
-    display: none;
-  }
-
-  .session-title {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .session-nav-metrics {
-    width: 100%;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lobby-link {
-    transition-duration: 0ms;
   }
 }

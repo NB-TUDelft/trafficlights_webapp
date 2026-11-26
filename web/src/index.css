@@ -5,6 +5,7 @@
 @import "./navbar.css";
 @import "./tables.css";
 @import "./cards.css";
+@import "./header.css";
 
 /* Palette from old/fastapi_receiver.py: bg #030712, panel #10182b, accent
    #29b6f6, green #57d86b, orange #ffa534, red #ff4d4d, muted #94a3b8. */
@@ -25,9 +26,12 @@
   box-sizing: border-box;
 }
 
+/* The scrollbar is always shown, so short and long pages lay out the header
+   (and everything else) at the same width and position. */
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-y: scroll;
 }
 
 html,

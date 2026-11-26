@@ -1,46 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-/* Landing page header, active sessions list, and clickable session cards. */
-
-.lobby-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 1.35rem 1.65rem;
-}
-
-.lobby-brand {
-  display: flex;
-  align-items: center;
-  gap: 1.15rem;
-  min-width: 0;
-}
-
-.lobby-brand-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.lobby-brand-copy h1 {
-  margin: 0;
-  font-size: clamp(1.5rem, 2.5vw, 1.95rem);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.15;
-}
-
-.lobby-brand-copy p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.96rem;
-  line-height: 1.5;
-  max-width: 60ch;
-}
+/* Active sessions list and clickable session cards. The page header lives in header.css. */
 
 .sessions-section {
   display: flex;

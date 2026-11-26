@@ -11,7 +11,6 @@ import { initialLobbyState, type LobbyState, lobbyReducer } from "@/protocol/red
 import { loadCreatorTokens } from "@/protocol/storage";
 import { EXPECTED_PROTO_VERSION } from "@/protocol/types";
 
-const LOGO_SIZE = 78;
 const ACTION_ICON_SIZE = 18;
 
 function statusLabel(status: SocketStatus): string {
@@ -46,17 +45,16 @@ export interface HomeViewProps {
 export function HomeView({ state, status, ownSessionIds }: Readonly<HomeViewProps>) {
   return (
     <main className="page">
-      <header className="lobby-header">
+      <header>
         <div className="lobby-brand">
-          <span className="brand-mark brand-mark-lg">
-            <img src="/icon.svg" width={LOGO_SIZE} height={LOGO_SIZE} alt="" />
+          <span className="brand-mark">
+            <img src="/icon.svg" alt="" />
           </span>
           <div className="lobby-brand-copy">
             <h1>Classroom Traffic Lights</h1>
             <p>
-              Teachers stream a micro:bit USB receiver from their browser and share live table
-              status with TAs and co-teachers, so questions and requests for help are visible at a
-              glance.
+              Share live table status with TAs and co-teachers, so questions and requests for help
+              are visible at a glance.
             </p>
           </div>
         </div>

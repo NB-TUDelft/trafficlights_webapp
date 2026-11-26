@@ -23,7 +23,6 @@ import { isWebSerialSupported, requestMicrobitPort } from "@/serial/loader";
 import { bindPendingSerialPort, setPendingSerialPort } from "@/serial/pending";
 
 const PARSE_RADIX = 10;
-const NEW_LOGO_SIZE = 58;
 const NEW_BACK_ICON_SIZE = 16;
 
 export interface NewSessionViewProps {
@@ -84,10 +83,10 @@ function collectNamesHint(collectNames: boolean): string {
 export function NewSessionView(props: NewSessionViewProps) {
   return (
     <main className="page">
-      <header className="lobby-header">
+      <header>
         <div className="lobby-brand">
-          <span className="brand-mark brand-mark-nav">
-            <img src="/icon.svg" width={NEW_LOGO_SIZE} height={NEW_LOGO_SIZE} alt="" />
+          <span className="brand-mark">
+            <img src="/icon.svg" alt="" />
           </span>
           <div className="lobby-brand-copy">
             <h1>Add session</h1>
@@ -100,7 +99,9 @@ export function NewSessionView(props: NewSessionViewProps) {
         <Link className="lobby-link" to="/">
           <span className="lobby-link-label">
             <ArrowLeft size={NEW_BACK_ICON_SIZE} aria-hidden="true" />
-            <span>Back to Lobby</span>
+            <span>
+              <span className="wide-only">Back to </span>Lobby
+            </span>
           </span>
         </Link>
       </header>

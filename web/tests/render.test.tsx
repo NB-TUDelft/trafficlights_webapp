@@ -28,7 +28,7 @@ describe("homepage rendering", () => {
     );
     expect(html).toContain("/icon.svg");
     expect(html).toContain("Classroom Traffic Lights");
-    expect(html).toContain("micro:bit USB receiver");
+    expect(html).toContain("Share live table status");
     expect(html).toContain("Add session");
     expect(html).toContain('href="/new"');
     expect(html).toContain('href="/s/sess-1"');
@@ -104,7 +104,7 @@ describe("session view role split", () => {
     });
     const html = render(<SessionView {...viewProps(state)} />);
     expect(html).toContain("control-grid-creator");
-    expect(html).toContain("session-nav-identity");
+    expect(html).toContain("session-nav-main");
     expect(html).toContain("Alert beeps");
     expect(html).toContain("Beeps On");
     expect(html).toContain("Lock beeps");
