@@ -5,12 +5,12 @@
 # the server. It builds the same tested stages CI does, on your machine, before
 # you push.
 #
-#   docker compose -f compose.dev.yaml up --build        # build + run on 127.0.0.1:3000
-#   docker compose -f compose.dev.yaml down              # stop
+#   docker compose -f compose.dev.yaml up --build        # build + run on 127.0.0.1:3000 (`make dev-up`)
+#   docker compose -f compose.dev.yaml down              # stop (`make dev-down`)
 #
 # There is no volume: classroom statistics are ephemeral `.jsonl` files in the
 # container's /tmp/trafficlights-logs, and they go away with the container.
-# Stop `make dev-hmr` / `cargo run` first: both listen on port 3000.
+# Stop `make dev` / `cargo run` first: both listen on port 3000.
 
 name: trafficlights-local
 

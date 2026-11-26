@@ -1,4 +1,4 @@
-.PHONY: gate dev dev-down dev-hmr wasm web-build sonar sonar-coverage sonar-local kb kb-check kb-graph
+.PHONY: gate dev dev-up dev-down wasm web-build sonar sonar-coverage sonar-local kb kb-check kb-graph
 
 # The gate before a commit, in this order: the knowledge-base layout and index
 # check; the wasm module (the frontend imports its generated glue); the frontend
@@ -16,17 +16,18 @@ gate:
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo test --workspace
 
-# Local development preview via Docker Compose (`compose.dev.yaml`) on http://127.0.0.1:3000.
+# Watch mode without Docker: open http://127.0.0.1:5173. Vite updates the frontend
+# on save; the Rust server on :3000 restarts (and rebuilds WASM) when crates/ change.
 dev:
 	scripts/dev.sh
+
+# Production-identical image via Docker Compose (`compose.dev.yaml`) on http://127.0.0.1:3000.
+dev-up:
+	scripts/dev.sh --up
 
 # Stop the local Docker Compose preview stack.
 dev-down:
 	scripts/dev.sh --down
-
-# Native HMR fallback (Rust server on :3000 + Vite HMR on http://127.0.0.1:5173).
-dev-hmr:
-	scripts/dev.sh --hmr
 
 # Browser WebAssembly module: build trafficlights-wasm and generate web/src/wasm.
 wasm:

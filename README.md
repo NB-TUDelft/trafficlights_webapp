@@ -13,7 +13,8 @@ classroom statistics as `.jsonl`.
 
 **Status:** v1 implementation complete and verified (`make gate`, `make sonar`
 quality gate `OK`, 47.5 MB distroless Docker image at 9.2 MiB RSS, headless
-Brave E2E). Ready for local preview (`make dev` -> `http://127.0.0.1:3000`),
+Brave E2E). Ready for local development (`make dev` -> `http://127.0.0.1:5173`,
+or the production image via `make dev-up` -> `http://127.0.0.1:3000`),
 real micro:bit V2 USB verification, and Coolify deployment (see Work order and
 History in the knowledge base).
 
@@ -29,9 +30,10 @@ entry point.
 ## Daily loop
 
     nub --cwd web install  # once on a fresh clone
-    make dev               # build & run local preview via Docker Compose (http://127.0.0.1:3000)
+    make dev               # watch mode (http://127.0.0.1:5173): Vite updates the frontend on save,
+                           #   the Rust server (:3000) restarts and WASM rebuilds when crates/ change
+    make dev-up            # build & run the production image via Docker Compose (http://127.0.0.1:3000)
     make dev-down          # stop the local Docker Compose preview stack
-    make dev-hmr           # native Rust (:3000) + Vite HMR (:5173) without Docker
     make wasm              # compile crates/wasm -> web/src/wasm
     make web-build         # build React frontend into web/dist (embedded by server)
     make sonar             # generate Vitest + Rust lcov coverage, run SonarQube scan, poll gate
@@ -49,7 +51,7 @@ entry point.
     crates/server/         Axum 0.8 + Tokio server with rust-embed (`web/dist`)
     web/                   React 19 + Vite + TypeScript + Tailwind CSS v4 (Nub, Biome, Vitest)
     scripts/build-wasm.sh  builds crates/wasm into web/src/wasm
-    scripts/dev.sh         local dev preview runner (`make dev`, `make dev-down`, `make dev-hmr`)
+    scripts/dev.sh         local dev runner (`make dev`, `make dev-up`, `make dev-down`)
     scripts/sonar.sh       SonarQube coverage, scan, and quality-gate poll (`make sonar`)
     scripts/kb.sh          knowledge-base index, check, and graph runner
     sonar-project.properties  SonarQube project and coverage paths (no tokens or URLs)
