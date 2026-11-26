@@ -113,6 +113,11 @@ button.mute-btn {
   transition: opacity 0.2s ease;
 }
 
+button.mute-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
 button.mute-btn:hover:not(:disabled) {
   opacity: 1;
   transform: none;

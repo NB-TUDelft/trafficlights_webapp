@@ -278,6 +278,15 @@ pub enum SessionClientMsg {
         /// their own tap-mode switch.
         locked: bool,
     },
+    /// Creator-only: set the host global beep state and whether viewers are
+    /// locked to the host's beep setting.
+    SetBeepMode {
+        /// Whether alert beeps are enabled on the host.
+        enabled: bool,
+        /// When true, all viewer clients follow `enabled` and cannot toggle
+        /// their own global beep switch.
+        locked: bool,
+    },
     /// Creator-only: close the session for everyone now.
     EndSession,
     /// Liveness check; answered with [`SessionServerMsg::Pong`].
@@ -325,6 +334,12 @@ pub enum SessionServerMsg {
         /// Whether viewer clients are locked to the host's tap mode.
         #[serde(default)]
         tap_mode_locked: bool,
+        /// Host's current global beep setting (`false` by default).
+        #[serde(default)]
+        beeps_enabled: bool,
+        /// Whether viewer clients are locked to the host's global beep setting.
+        #[serde(default)]
+        beeps_locked: bool,
         /// Whether this connection authenticated as the creator.
         is_creator: bool,
         /// Out-of-range stations heard; creator-only debugging data.
@@ -372,8 +387,8 @@ pub enum SessionServerMsg {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         firmware: Option<FirmwareInfo>,
     },
-    /// Session metadata changed: renamed, re-ranged, tap mode changed, or a
-    /// viewer joined or left.
+    /// Session metadata changed: renamed, re-ranged, tap/beep mode changed, or
+    /// a viewer joined or left.
     SessionMeta {
         /// Current session name.
         name: String,
@@ -387,6 +402,12 @@ pub enum SessionServerMsg {
         /// Whether viewer clients are locked to the host's tap mode.
         #[serde(default)]
         tap_mode_locked: bool,
+        /// Host's current global beep setting.
+        #[serde(default)]
+        beeps_enabled: bool,
+        /// Whether viewer clients are locked to the host's global beep setting.
+        #[serde(default)]
+        beeps_locked: bool,
     },
     /// Creator-only: write this command to the serial device. The
     /// browser formats it with `wire::format_command` (through the WASM
@@ -655,6 +676,23 @@ mod tests {
                 locked: false,
             })
         );
+        assert_eq!(
+            json(&SessionClientMsg::SetBeepMode {
+                enabled: true,
+                locked: true,
+            }),
+            "{\"type\":\"set_beep_mode\",\"enabled\":true,\"locked\":true}"
+        );
+        assert_eq!(
+            serde_json::from_str::<SessionClientMsg>(
+                "{\"type\":\"set_beep_mode\",\"enabled\":false,\"locked\":false}"
+            )
+            .ok(),
+            Some(SessionClientMsg::SetBeepMode {
+                enabled: false,
+                locked: false,
+            })
+        );
     }
 
     #[test]
@@ -686,6 +724,8 @@ mod tests {
             viewer_count: 2,
             tap_mode: TapMode::Green,
             tap_mode_locked: false,
+            beeps_enabled: false,
+            beeps_locked: false,
             is_creator: false,
             unlisted_tables: Vec::new(),
             server_now_ms: 1_764_086_420_000,

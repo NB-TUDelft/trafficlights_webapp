@@ -14,7 +14,12 @@ import type {
   TapMode,
   UnlistedTable,
 } from "./types";
-import { DEFAULT_RANGE_END, DEFAULT_RANGE_START, DEFAULT_TAP_MODE } from "./types";
+import {
+  DEFAULT_BEEPS_ENABLED,
+  DEFAULT_RANGE_END,
+  DEFAULT_RANGE_START,
+  DEFAULT_TAP_MODE,
+} from "./types";
 
 export interface CreatedSession {
   sessionId: string;
@@ -86,6 +91,8 @@ export interface SessionState {
   viewerCount: number;
   tapMode: TapMode;
   tapModeLocked: boolean;
+  beepsEnabled: boolean;
+  beepsLocked: boolean;
   isCreator: boolean;
   unlistedTables: UnlistedTable[];
   serverNowMs: number | null;
@@ -108,6 +115,8 @@ export const initialSessionState: SessionState = {
   viewerCount: 0,
   tapMode: DEFAULT_TAP_MODE,
   tapModeLocked: false,
+  beepsEnabled: DEFAULT_BEEPS_ENABLED,
+  beepsLocked: false,
   isCreator: false,
   unlistedTables: [],
   serverNowMs: null,
@@ -136,6 +145,8 @@ function fromSnapshot(state: SessionState, msg: SnapshotMsg): SessionState {
     viewerCount: msg.viewer_count,
     tapMode: msg.tap_mode ?? DEFAULT_TAP_MODE,
     tapModeLocked: msg.tap_mode_locked ?? false,
+    beepsEnabled: msg.beeps_enabled ?? DEFAULT_BEEPS_ENABLED,
+    beepsLocked: msg.beeps_locked ?? false,
     isCreator: msg.is_creator,
     unlistedTables: msg.unlisted_tables ?? [],
     serverNowMs: msg.server_now_ms,
@@ -190,6 +201,8 @@ export function sessionReducer(state: SessionState, msg: SessionServerMsg): Sess
       viewerCount: msg.viewer_count,
       tapMode: msg.tap_mode ?? state.tapMode,
       tapModeLocked: msg.tap_mode_locked ?? state.tapModeLocked,
+      beepsEnabled: msg.beeps_enabled ?? state.beepsEnabled,
+      beepsLocked: msg.beeps_locked ?? state.beepsLocked,
     };
   }
   if (msg.type === "unlisted_tables") {

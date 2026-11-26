@@ -114,14 +114,21 @@ function tapModeHint(tapMode: TapMode, lockedForViewer: boolean): string {
   return lockedForViewer ? `Locked by host · ${modeText}` : modeText;
 }
 
+function beepHint(beepsEnabled: boolean, lockedForViewer: boolean): string {
+  const statusText = beepsEnabled ? "Beeps On" : "Beeps Off";
+  return lockedForViewer ? `Locked by host · ${statusText}` : statusText;
+}
+
 export interface QuickActionsProps {
   receiverConnected: boolean;
   beepsEnabled: boolean;
+  beepsLocked: boolean;
   viewerCount: number;
   tapMode: TapMode;
   tapModeLocked: boolean;
   onResetAll: () => void;
   onToggleBeeps: () => void;
+  onToggleBeepsLock: () => void;
   onToggleTapMode: () => void;
   onToggleTapModeLock: () => void;
 }
@@ -133,9 +140,20 @@ export function QuickActionsCard(props: Readonly<QuickActionsProps>) {
       <button type="button" disabled={!props.receiverConnected} onClick={props.onResetAll}>
         Reset All To Green
       </button>
-      <button type="button" aria-pressed={props.beepsEnabled} onClick={props.onToggleBeeps}>
-        {props.beepsEnabled ? "Beeps On" : "Beeps Off"}
-      </button>
+      <ToggleSwitch
+        id="host-beeps"
+        label="Alert beeps"
+        hint={beepHint(props.beepsEnabled, false)}
+        checked={props.beepsEnabled}
+        onToggle={props.onToggleBeeps}
+      />
+      <ToggleSwitch
+        id="host-beeps-lock"
+        label="Lock beeps"
+        hint={props.beepsLocked ? "Viewers follow host" : "Viewers choose own"}
+        checked={props.beepsLocked}
+        onToggle={props.onToggleBeepsLock}
+      />
       <ToggleSwitch
         id="host-tap-mode"
         label="Cycle on tap"
@@ -157,6 +175,7 @@ export function QuickActionsCard(props: Readonly<QuickActionsProps>) {
 
 export interface AudioInfoProps {
   beepsEnabled: boolean;
+  beepsLocked: boolean;
   viewerCount: number;
   tapMode: TapMode;
   tapModeLocked: boolean;
@@ -172,9 +191,14 @@ export function AudioInfoCard(props: Readonly<AudioInfoProps>) {
   return (
     <article className="control-card">
       <h2 className="card-label">Audio &amp; Session Info</h2>
-      <button type="button" aria-pressed={props.beepsEnabled} onClick={props.onToggleBeeps}>
-        {props.beepsEnabled ? "Beeps On" : "Beeps Off"}
-      </button>
+      <ToggleSwitch
+        id="viewer-beeps"
+        label="Alert beeps"
+        hint={beepHint(props.beepsEnabled, props.beepsLocked)}
+        checked={props.beepsEnabled}
+        disabled={props.beepsLocked}
+        onToggle={props.onToggleBeeps}
+      />
       <ToggleSwitch
         id="viewer-tap-mode"
         label="Cycle on tap"

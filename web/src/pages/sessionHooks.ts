@@ -7,11 +7,19 @@ import { ReconnectingSocket, type SocketStatus, websocketUrl } from "@/lib/socke
 import { parseSessionServerMsg } from "@/protocol/parse-session";
 import type { SessionState } from "@/protocol/reducers";
 import { getCreatorToken } from "@/protocol/storage";
-import type { Color, SessionClientMsg, SessionServerMsg, TapMode } from "@/protocol/types";
+import type { Color, SessionServerMsg } from "@/protocol/types";
 import { isValidTableRange, normalizeSessionName } from "@/protocol/types";
 import type { CreatorSerialBridge } from "@/serial/bridge";
 import { requestMicrobitPort } from "@/serial/loader";
 import type { SerialPortLike } from "@/serial/types";
+import {
+  type ModeHandlersArgs,
+  toggleBeeps,
+  toggleBeepsLock,
+  toggleMuteWhenActive,
+  toggleTapMode,
+  toggleTapModeLock,
+} from "./sessionModeHandlers";
 
 const PARSE_RADIX = 10;
 
@@ -104,18 +112,11 @@ export function useBeeps(
   }, [state.tables, beepsEnabled, mutedTables, prevColorsRef]);
 }
 
-export interface HandlersArgs {
+export interface HandlersArgs extends ModeHandlersArgs {
   state: SessionState;
-  send: (msg: SessionClientMsg) => boolean;
   setTransientError: (value: string | null) => void;
   setMutedTables: (updater: (prev: ReadonlySet<number>) => ReadonlySet<number>) => void;
-  setBeepsEnabled: (updater: (prev: boolean) => boolean) => void;
   beepsEnabled: boolean;
-  hostTapMode: TapMode;
-  hostTapModeLocked: boolean;
-  setLocalTapMode: (updater: (prev: TapMode) => TapMode) => void;
-  setHostTapMode: (value: TapMode) => void;
-  setHostTapModeLocked: (value: boolean) => void;
   rangeStart: string;
   rangeEnd: string;
   renameValue: string;
@@ -138,12 +139,11 @@ export function useSessionHandlers(args: HandlersArgs) {
     [args],
   );
   const onToggleMute = useCallback(
-    (table: number) => {
-      args.setMutedTables((prev) => toggleMuted(prev, table));
-    },
+    (table: number) => toggleMuteWhenActive(args.beepsEnabled, table, args.setMutedTables),
     [args],
   );
-  const onToggleBeeps = useCallback(() => args.setBeepsEnabled((prev) => !prev), [args]);
+  const onToggleBeeps = useCallback(() => toggleBeeps(args), [args]);
+  const onToggleBeepsLock = useCallback(() => toggleBeepsLock(args), [args]);
   const onToggleTapMode = useCallback(() => toggleTapMode(args), [args]);
   const onToggleTapModeLock = useCallback(() => toggleTapModeLock(args), [args]);
   const onConnectSerial = useCallback(() => {
@@ -166,6 +166,7 @@ export function useSessionHandlers(args: HandlersArgs) {
     onSetTable,
     onToggleMute,
     onToggleBeeps,
+    onToggleBeepsLock,
     onToggleTapMode,
     onToggleTapModeLock,
     onConnectSerial,
@@ -176,38 +177,6 @@ export function useSessionHandlers(args: HandlersArgs) {
     onDownloadLog,
     onConfirmEnd,
   };
-}
-
-export function toggleTapMode(args: HandlersArgs): void {
-  if (args.state.isCreator) {
-    const next: TapMode = args.hostTapMode === "cycle" ? "green" : "cycle";
-    args.setHostTapMode(next);
-    args.send({ type: "set_tap_mode", tap_mode: next, locked: args.hostTapModeLocked });
-    return;
-  }
-  if (args.state.tapModeLocked) {
-    return;
-  }
-  args.setLocalTapMode((prev) => (prev === "cycle" ? "green" : "cycle"));
-}
-
-export function toggleTapModeLock(args: HandlersArgs): void {
-  if (!args.state.isCreator) {
-    return;
-  }
-  const nextLocked = !args.hostTapModeLocked;
-  args.setHostTapModeLocked(nextLocked);
-  args.send({ type: "set_tap_mode", tap_mode: args.hostTapMode, locked: nextLocked });
-}
-
-function toggleMuted(prev: ReadonlySet<number>, table: number): ReadonlySet<number> {
-  const next = new Set(prev);
-  if (next.has(table)) {
-    next.delete(table);
-  } else {
-    next.add(table);
-  }
-  return next;
 }
 
 async function connectFromPicker(args: HandlersArgs): Promise<void> {

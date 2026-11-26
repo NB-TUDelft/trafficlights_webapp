@@ -11,10 +11,26 @@ const HALF = 2;
 
 export interface TableGridProps {
   tables: readonly TableEntry[];
+  beepsEnabled: boolean;
   mutedTables: ReadonlySet<number>;
   tapMode: TapMode;
   onSetTable: (table: number, color: Color) => void;
   onToggleMute: (table: number) => void;
+}
+
+export function isTableEffectivelyMuted(beepsEnabled: boolean, manuallyMuted: boolean): boolean {
+  return !beepsEnabled || manuallyMuted;
+}
+
+export function tableMuteLabel(
+  table: number,
+  beepsEnabled: boolean,
+  manuallyMuted: boolean,
+): string {
+  if (!beepsEnabled) {
+    return `Beep off for table ${table} (global beeps are off)`;
+  }
+  return manuallyMuted ? `Unmute beep for table ${table}` : `Mute beep for table ${table}`;
 }
 
 interface MenuAnchor {
@@ -67,7 +83,8 @@ function UnmutedIcon() {
 
 interface TableCardProps {
   entry: TableEntry;
-  isMuted: boolean;
+  beepsEnabled: boolean;
+  manuallyMuted: boolean;
   tapMode: TapMode;
   onSetTable: (table: number, color: Color) => void;
   onToggleMute: (table: number) => void;
@@ -76,16 +93,16 @@ interface TableCardProps {
 
 function TableCard({
   entry,
-  isMuted,
+  beepsEnabled,
+  manuallyMuted,
   tapMode,
   onSetTable,
   onToggleMute,
   onOpenMenu,
 }: Readonly<TableCardProps>) {
   const targetColor = tapTargetColor(entry.color, tapMode);
-  const muteLabel = isMuted
-    ? `Unmute beep for table ${entry.table}`
-    : `Mute beep for table ${entry.table}`;
+  const effectivelyMuted = isTableEffectivelyMuted(beepsEnabled, manuallyMuted);
+  const muteLabel = tableMuteLabel(entry.table, beepsEnabled, manuallyMuted);
   const longPress = useMemo(
     () => createLongPressController((x, y) => onOpenMenu({ table: entry.table, x, y })),
     [entry.table, onOpenMenu],
@@ -130,10 +147,11 @@ function TableCard({
         className="mute-btn"
         aria-label={muteLabel}
         title={muteLabel}
-        aria-pressed={isMuted}
+        aria-pressed={effectivelyMuted}
+        disabled={!beepsEnabled}
         onClick={() => onToggleMute(entry.table)}
       >
-        {isMuted ? <MutedIcon /> : <UnmutedIcon />}
+        {effectivelyMuted ? <MutedIcon /> : <UnmutedIcon />}
       </button>
     </article>
   );
@@ -141,6 +159,7 @@ function TableCard({
 
 export function TableGrid({
   tables,
+  beepsEnabled,
   mutedTables,
   tapMode,
   onSetTable,
@@ -157,7 +176,8 @@ export function TableGrid({
           <TableCard
             key={entry.table}
             entry={entry}
-            isMuted={mutedTables.has(entry.table)}
+            beepsEnabled={beepsEnabled}
+            manuallyMuted={mutedTables.has(entry.table)}
             tapMode={tapMode}
             onSetTable={onSetTable}
             onToggleMute={onToggleMute}

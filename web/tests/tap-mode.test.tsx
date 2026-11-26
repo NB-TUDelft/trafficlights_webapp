@@ -17,8 +17,12 @@ import { handleTileActivate, resolveContextAnchor } from "@/components/TableGrid
 import { ToggleSwitch } from "@/components/ToggleSwitch";
 import { createLongPressController, LONG_PRESS_MS } from "@/lib/longPress";
 import { HomeView } from "@/pages/HomePage";
-import { resolveTapMode } from "@/pages/SessionPage";
-import { type HandlersArgs, toggleTapMode, toggleTapModeLock } from "@/pages/sessionHooks";
+import {
+  type ModeHandlersArgs,
+  resolveTapMode,
+  toggleTapMode,
+  toggleTapModeLock,
+} from "@/pages/sessionModeHandlers";
 import { initialSessionState } from "@/protocol/reducers";
 import type { Color, SessionClientMsg, TapMode } from "@/protocol/types";
 
@@ -26,21 +30,20 @@ const noop = (): void => {
   // Test stub.
 };
 
-function makeHandlerArgs(overrides?: Partial<HandlersArgs>) {
+function makeHandlerArgs(overrides?: Partial<ModeHandlersArgs>) {
   const sent: SessionClientMsg[] = [];
   let localTapMode: TapMode = "green";
   let hostTapMode: TapMode = "green";
   let hostTapModeLocked = false;
-  const args: HandlersArgs = {
+  let localBeepsEnabled = false;
+  let hostBeepsEnabled = false;
+  let hostBeepsLocked = false;
+  const args: ModeHandlersArgs = {
     state: initialSessionState,
     send: (msg) => {
       sent.push(msg);
       return true;
     },
-    setTransientError: noop,
-    setMutedTables: noop,
-    setBeepsEnabled: noop,
-    beepsEnabled: true,
     hostTapMode,
     hostTapModeLocked,
     setLocalTapMode: (updater) => {
@@ -52,14 +55,17 @@ function makeHandlerArgs(overrides?: Partial<HandlersArgs>) {
     setHostTapModeLocked: (value) => {
       hostTapModeLocked = value;
     },
-    rangeStart: "1",
-    rangeEnd: "60",
-    renameValue: "Room",
-    sessionId: "sess-1",
-    showAllPorts: false,
-    connectToPort: () => Promise.resolve(),
-    bridgeRef: { current: null },
-    setConfirmEnd: noop,
+    hostBeepsEnabled,
+    hostBeepsLocked,
+    setLocalBeepsEnabled: (updater) => {
+      localBeepsEnabled = updater(localBeepsEnabled);
+    },
+    setHostBeepsEnabled: (value) => {
+      hostBeepsEnabled = value;
+    },
+    setHostBeepsLocked: (value) => {
+      hostBeepsLocked = value;
+    },
     ...overrides,
   };
   return { args, sent, read: () => ({ localTapMode, hostTapMode, hostTapModeLocked }) };

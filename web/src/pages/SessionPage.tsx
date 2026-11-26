@@ -9,6 +9,7 @@ import { initialSessionState, type SessionState, sessionReducer } from "@/protoc
 import type { Color, SessionClientMsg } from "@/protocol/types";
 import { isWebSerialSupported } from "@/serial/loader";
 import { useBeeps, useSessionHandlers, useSessionSocket } from "./sessionHooks";
+import { resolveBeepsEnabled, resolveTapMode } from "./sessionModeHandlers";
 import { usePendingPort, useSerialBridge, useSessionUiState } from "./sessionStateHooks";
 
 const TICK_MS = 1000;
@@ -61,25 +62,18 @@ function undismissedError(state: SessionState, dismissed: string | null): string
   return `${state.error.code}:${state.error.message}` === dismissed ? null : state.error.message;
 }
 
-export function resolveTapMode(
-  state: Pick<SessionState, "isCreator" | "tapMode" | "tapModeLocked">,
-  ui: Pick<UiState, "hostTapMode" | "localTapMode">,
-) {
-  if (state.isCreator) {
-    return ui.hostTapMode;
-  }
-  return state.tapModeLocked ? state.tapMode : ui.localTapMode;
-}
-
 function buildViewProps(args: ViewPropsArgs): SessionViewProps {
   const { state, ui, serialBridge, handlers } = args;
   const tapModeLocked = state.isCreator ? ui.hostTapModeLocked : state.tapModeLocked;
   const tapMode = resolveTapMode(state, ui);
+  const beepsLocked = state.isCreator ? ui.hostBeepsLocked : state.beepsLocked;
+  const beepsEnabled = resolveBeepsEnabled(state, ui);
   return {
     state,
     socketStatus: args.socketStatus,
     nowMs: args.nowMs,
-    beepsEnabled: ui.beepsEnabled,
+    beepsEnabled,
+    beepsLocked,
     mutedTables: ui.mutedTables,
     tapMode,
     tapModeLocked,
@@ -120,6 +114,7 @@ function SessionConsole({ sessionId }: { sessionId: string }) {
   const prevColorsRef = useRef<Map<number, Color>>(new Map());
   const send = useCallback((msg: SessionClientMsg) => socketRef.current?.send(msg) ?? false, []);
   const serialBridge = useSerialBridge(send, ui.setTransientError);
+  const beepsEnabled = resolveBeepsEnabled(state, ui);
   useSessionSocket({
     sessionId,
     dispatch,
@@ -129,14 +124,18 @@ function SessionConsole({ sessionId }: { sessionId: string }) {
     stopReconnectRef,
   });
   usePendingPort(state.isCreator, sessionId, serialBridge.connectToPort);
-  useBeeps(state, ui.beepsEnabled, ui.mutedTables, prevColorsRef);
+  useBeeps(state, beepsEnabled, ui.mutedTables, prevColorsRef);
   const handlers = useSessionHandlers({
     state,
     send,
     setTransientError: ui.setTransientError,
     setMutedTables: ui.setMutedTables,
-    setBeepsEnabled: ui.setBeepsEnabled,
-    beepsEnabled: ui.beepsEnabled,
+    beepsEnabled,
+    hostBeepsEnabled: ui.hostBeepsEnabled,
+    hostBeepsLocked: ui.hostBeepsLocked,
+    setLocalBeepsEnabled: ui.setLocalBeepsEnabled,
+    setHostBeepsEnabled: ui.setHostBeepsEnabled,
+    setHostBeepsLocked: ui.setHostBeepsLocked,
     hostTapMode: ui.hostTapMode,
     hostTapModeLocked: ui.hostTapModeLocked,
     setLocalTapMode: ui.setLocalTapMode,

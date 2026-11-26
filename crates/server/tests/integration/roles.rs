@@ -227,6 +227,10 @@ async fn viewers_are_forbidden_from_every_creator_control() {
             tap_mode: TapMode::Cycle,
             locked: true,
         },
+        SessionClientMsg::SetBeepMode {
+            enabled: true,
+            locked: true,
+        },
         SessionClientMsg::EndSession,
     ];
     for message in &forbidden {
@@ -1061,6 +1065,87 @@ async fn the_creator_sets_and_locks_tap_mode_for_viewers() {
             SessionServerMsg::SessionMeta {
                 tap_mode: TapMode::Green,
                 tap_mode_locked: false,
+                ..
+            }
+        ),
+        "unexpected {unlocked:?}"
+    );
+}
+
+#[tokio::test]
+async fn the_creator_sets_and_locks_beeps_for_viewers() {
+    let server = TestServer::start(|_| {}).await;
+    let session = server.create("Room", 1, 10).await;
+    let mut creator = server.creator(&session).await;
+    let mut viewer = server.viewer(&session.id).await;
+
+    // Fresh sessions default to beeps off and unlocked.
+    let mut initial = server.ws_ok(&format!("/ws/sessions/{}", session.id)).await;
+    let initial_snapshot: SessionServerMsg = initial.recv().await;
+    assert!(
+        matches!(
+            initial_snapshot,
+            SessionServerMsg::Snapshot {
+                beeps_enabled: false,
+                beeps_locked: false,
+                ..
+            }
+        ),
+        "unexpected {initial_snapshot:?}"
+    );
+
+    creator
+        .send(&SessionClientMsg::SetBeepMode {
+            enabled: true,
+            locked: true,
+        })
+        .await;
+    let meta = viewer
+        .recv_until(|msg: &SessionServerMsg| matches!(msg, SessionServerMsg::SessionMeta { .. }))
+        .await;
+    assert!(
+        matches!(
+            meta,
+            SessionServerMsg::SessionMeta {
+                beeps_enabled: true,
+                beeps_locked: true,
+                ..
+            }
+        ),
+        "unexpected {meta:?}"
+    );
+
+    // Late joiners immediately receive the locked beep state in their snapshot.
+    let mut late = server.ws_ok(&format!("/ws/sessions/{}", session.id)).await;
+    let snapshot: SessionServerMsg = late.recv().await;
+    assert!(
+        matches!(
+            snapshot,
+            SessionServerMsg::Snapshot {
+                beeps_enabled: true,
+                beeps_locked: true,
+                ..
+            }
+        ),
+        "unexpected {snapshot:?}"
+    );
+
+    // Unlocking broadcasts back to everyone.
+    creator
+        .send(&SessionClientMsg::SetBeepMode {
+            enabled: false,
+            locked: false,
+        })
+        .await;
+    let unlocked = viewer
+        .recv_until(|msg: &SessionServerMsg| matches!(msg, SessionServerMsg::SessionMeta { .. }))
+        .await;
+    assert!(
+        matches!(
+            unlocked,
+            SessionServerMsg::SessionMeta {
+                beeps_enabled: false,
+                beeps_locked: false,
                 ..
             }
         ),

@@ -95,6 +95,8 @@ pub struct Session {
     firmware: Option<FirmwareInfo>,
     tap_mode: TapMode,
     tap_mode_locked: bool,
+    beeps_enabled: bool,
+    beeps_locked: bool,
     creator: Option<Client>,
     viewers: HashMap<ConnId, Client>,
     pending: HashMap<ConnId, Client>,
@@ -119,6 +121,8 @@ impl Session {
             firmware: None,
             tap_mode: TapMode::Green,
             tap_mode_locked: false,
+            beeps_enabled: false,
+            beeps_locked: false,
             creator: None,
             viewers: HashMap::new(),
             pending: HashMap::new(),
@@ -240,6 +244,8 @@ impl Session {
             viewer_count: self.viewer_count(),
             tap_mode: self.tap_mode,
             tap_mode_locked: self.tap_mode_locked,
+            beeps_enabled: self.beeps_enabled,
+            beeps_locked: self.beeps_locked,
             is_creator,
             unlisted_tables: if is_creator {
                 self.board.unlisted_tables()
@@ -269,6 +275,8 @@ impl Session {
             viewer_count: self.viewer_count(),
             tap_mode: self.tap_mode,
             tap_mode_locked: self.tap_mode_locked,
+            beeps_enabled: self.beeps_enabled,
+            beeps_locked: self.beeps_locked,
         }
     }
 
@@ -420,6 +428,7 @@ fn creator_mutating(message: &SessionClientMsg) -> bool {
             | SessionClientMsg::SetTableRange { .. }
             | SessionClientMsg::RenameSession { .. }
             | SessionClientMsg::SetTapMode { .. }
+            | SessionClientMsg::SetBeepMode { .. }
     )
 }
 
@@ -573,6 +582,13 @@ pub(crate) async fn handle(
             if session.tap_mode != tap_mode || session.tap_mode_locked != locked {
                 session.tap_mode = tap_mode;
                 session.tap_mode_locked = locked;
+                session.broadcast(&session.meta());
+            }
+        }
+        SessionClientMsg::SetBeepMode { enabled, locked } => {
+            if session.beeps_enabled != enabled || session.beeps_locked != locked {
+                session.beeps_enabled = enabled;
+                session.beeps_locked = locked;
                 session.broadcast(&session.meta());
             }
         }

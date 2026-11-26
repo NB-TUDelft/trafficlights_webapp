@@ -51,6 +51,7 @@ export interface SessionViewProps {
   socketStatus: SocketStatus;
   nowMs: number;
   beepsEnabled: boolean;
+  beepsLocked: boolean;
   mutedTables: ReadonlySet<number>;
   tapMode: TapMode;
   tapModeLocked: boolean;
@@ -69,6 +70,7 @@ export interface SessionViewProps {
   onSetTable: (table: number, color: Color) => void;
   onToggleMute: (table: number) => void;
   onToggleBeeps: () => void;
+  onToggleBeepsLock: () => void;
   onToggleTapMode: () => void;
   onToggleTapModeLock: () => void;
   onConnectSerial: () => void;
@@ -110,11 +112,13 @@ function CreatorControls(props: Readonly<SessionViewProps>) {
       <QuickActionsCard
         receiverConnected={props.state.receiverConnected}
         beepsEnabled={props.beepsEnabled}
+        beepsLocked={props.beepsLocked}
         viewerCount={props.state.viewerCount}
         tapMode={props.tapMode}
         tapModeLocked={props.tapModeLocked}
         onResetAll={props.onResetAll}
         onToggleBeeps={props.onToggleBeeps}
+        onToggleBeepsLock={props.onToggleBeepsLock}
         onToggleTapMode={props.onToggleTapMode}
         onToggleTapModeLock={props.onToggleTapModeLock}
       />
@@ -132,29 +136,13 @@ function CreatorControls(props: Readonly<SessionViewProps>) {
   );
 }
 
-export function SessionView(props: Readonly<SessionViewProps>) {
+function SessionBanners(props: Readonly<SessionViewProps>) {
   const { state } = props;
-  const displayError = props.transientError;
   const firmware = props.serialFirmware ?? state.firmware;
-  const longest = computeLongestOnRed(state.tables, props.nowMs, state.clockOffsetMs);
   return (
-    <main className="page">
-      <SessionHeader
-        name={state.name}
-        counts={state.counts}
-        statusLabel={sessionStatusLabel(
-          props.socketStatus,
-          state.receiverConnected,
-          state.ended !== null,
-        )}
-        statusKind={sessionStatusKind(
-          props.socketStatus,
-          state.receiverConnected,
-          state.ended !== null,
-        )}
-      />
-      {displayError === null ? null : (
-        <ErrorBanner message={displayError} onDismiss={props.onDismissError} />
+    <>
+      {props.transientError === null ? null : (
+        <ErrorBanner message={props.transientError} onDismiss={props.onDismissError} />
       )}
       {state.serverInfo !== null && state.serverInfo.proto_version !== EXPECTED_PROTO_VERSION ? (
         <div className="banner banner-warning" role="alert">
@@ -172,12 +160,37 @@ export function SessionView(props: Readonly<SessionViewProps>) {
         <WrongModeBanner firmware={firmware} />
       ) : null}
       {state.isCreator ? <UnlistedBanner tables={state.unlistedTables} /> : null}
+    </>
+  );
+}
+
+export function SessionView(props: Readonly<SessionViewProps>) {
+  const { state } = props;
+  const longest = computeLongestOnRed(state.tables, props.nowMs, state.clockOffsetMs);
+  return (
+    <main className="page">
+      <SessionHeader
+        name={state.name}
+        counts={state.counts}
+        statusLabel={sessionStatusLabel(
+          props.socketStatus,
+          state.receiverConnected,
+          state.ended !== null,
+        )}
+        statusKind={sessionStatusKind(
+          props.socketStatus,
+          state.receiverConnected,
+          state.ended !== null,
+        )}
+      />
+      <SessionBanners {...props} />
       <section className={state.isCreator ? "control-grid control-grid-creator" : "control-grid"}>
         {state.isCreator ? (
           <CreatorControls {...props} />
         ) : (
           <AudioInfoCard
             beepsEnabled={props.beepsEnabled}
+            beepsLocked={props.beepsLocked}
             viewerCount={state.viewerCount}
             tapMode={props.tapMode}
             tapModeLocked={props.tapModeLocked}
@@ -189,6 +202,7 @@ export function SessionView(props: Readonly<SessionViewProps>) {
       </section>
       <TableGrid
         tables={state.tables}
+        beepsEnabled={props.beepsEnabled}
         mutedTables={props.mutedTables}
         tapMode={props.tapMode}
         onSetTable={props.onSetTable}

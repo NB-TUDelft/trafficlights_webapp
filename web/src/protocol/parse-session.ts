@@ -39,6 +39,32 @@ function optionalTapMode(rec: JsonRecord, key: string): TapMode | undefined {
   return undefined;
 }
 
+interface ModeFields {
+  tap_mode?: TapMode;
+  tap_mode_locked?: boolean;
+  beeps_enabled?: boolean;
+  beeps_locked?: boolean;
+}
+
+function applyModeFields(rec: JsonRecord, target: ModeFields): void {
+  const tapMode = optionalTapMode(rec, "tap_mode");
+  if (tapMode !== undefined) {
+    target.tap_mode = tapMode;
+  }
+  const tapModeLocked = boolField(rec, "tap_mode_locked");
+  if (tapModeLocked !== null) {
+    target.tap_mode_locked = tapModeLocked;
+  }
+  const beepsEnabled = boolField(rec, "beeps_enabled");
+  if (beepsEnabled !== null) {
+    target.beeps_enabled = beepsEnabled;
+  }
+  const beepsLocked = boolField(rec, "beeps_locked");
+  if (beepsLocked !== null) {
+    target.beeps_locked = beepsLocked;
+  }
+}
+
 function endReason(value: unknown): EndReason | null {
   if (value === "manual" || value === "grace_timeout" || value === "shutdown") {
     return value;
@@ -158,14 +184,7 @@ function buildSnapshot(rec: JsonRecord, parts: SnapshotParts): SessionServerMsg 
   if (firmware !== undefined) {
     msg.firmware = firmware;
   }
-  const tapMode = optionalTapMode(rec, "tap_mode");
-  if (tapMode !== undefined) {
-    msg.tap_mode = tapMode;
-  }
-  const tapModeLocked = boolField(rec, "tap_mode_locked");
-  if (tapModeLocked !== null) {
-    msg.tap_mode_locked = tapModeLocked;
-  }
+  applyModeFields(rec, msg);
   return msg;
 }
 
@@ -230,14 +249,7 @@ function parseSessionMeta(rec: JsonRecord): SessionServerMsg | null {
     range,
     viewer_count: viewerCount,
   };
-  const tapMode = optionalTapMode(rec, "tap_mode");
-  if (tapMode !== undefined) {
-    msg.tap_mode = tapMode;
-  }
-  const tapModeLocked = boolField(rec, "tap_mode_locked");
-  if (tapModeLocked !== null) {
-    msg.tap_mode_locked = tapModeLocked;
-  }
+  applyModeFields(rec, msg);
   return msg;
 }
 

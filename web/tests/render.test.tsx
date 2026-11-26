@@ -60,7 +60,8 @@ function viewProps(state: SessionState, overrides?: Partial<SessionViewProps>): 
     state,
     socketStatus: "open",
     nowMs: 61_000,
-    beepsEnabled: true,
+    beepsEnabled: state.beepsEnabled,
+    beepsLocked: state.beepsLocked,
     mutedTables: new Set([1]),
     tapMode: state.tapMode,
     tapModeLocked: state.tapModeLocked,
@@ -79,6 +80,7 @@ function viewProps(state: SessionState, overrides?: Partial<SessionViewProps>): 
     onSetTable: noop,
     onToggleMute: noop,
     onToggleBeeps: noop,
+    onToggleBeepsLock: noop,
     onToggleTapMode: noop,
     onToggleTapModeLock: noop,
     onConnectSerial: noop,
@@ -171,13 +173,15 @@ describe("add session rendering", () => {
 describe("session view role split", () => {
   it("hides every creator control for normal clients", () => {
     const html = render(<SessionView {...viewProps(baseState({ isCreator: false }))} />);
-    expect(html).toContain("Beeps On");
+    expect(html).toContain("Alert beeps");
+    expect(html).toContain("Beeps Off");
     expect(html).toContain("Longest On Red");
     expect(html).toContain("red-list-wrap");
     expect(html).not.toContain("control-grid-creator");
     expect(html).toContain("Cycle on tap");
     expect(html).toContain("Tap resets to green");
     expect(html).toContain("Activate to set green. Hold or right-click for all colors.");
+    expect(html).not.toContain("Lock beeps");
     expect(html).not.toContain("Lock tap mode");
     expect(html).not.toContain("Reset All To Green");
     expect(html).not.toContain("Table Range");
@@ -201,12 +205,16 @@ describe("session view role split", () => {
   it("shows creator controls, station warning, unlisted Table 0, and mute labels", () => {
     const state = baseState({
       isCreator: true,
+      beepsEnabled: true,
       firmware: { kind: "new", mode: "station", version: "draft-1", station_id: 7 },
       unlistedTables: [{ table: 0, color: "red", last_seen_ms: 99 }],
     });
     const html = render(<SessionView {...viewProps(state)} />);
     expect(html).toContain("control-grid-creator");
     expect(html).toContain("session-nav-identity");
+    expect(html).toContain("Alert beeps");
+    expect(html).toContain("Beeps On");
+    expect(html).toContain("Lock beeps");
     expect(html).toContain("Cycle on tap");
     expect(html).toContain("Lock tap mode");
     expect(html).toContain("Reset All To Green");
@@ -268,14 +276,6 @@ describe("protocol mismatch and accessibility attributes", () => {
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('role="status"');
     expect(html).toContain('alt=""');
-  });
-
-  it("shows aria-pressed false when beeps are off for viewers", () => {
-    const html = render(
-      <SessionView {...{ ...viewProps(baseState({ isCreator: false })), beepsEnabled: false }} />,
-    );
-    expect(html).toContain('aria-pressed="false"');
-    expect(html).toContain("Beeps Off");
   });
 });
 

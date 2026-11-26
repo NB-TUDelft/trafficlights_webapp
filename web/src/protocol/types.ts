@@ -9,6 +9,7 @@ export const COLOR_GREEN: Color = "green";
 export const COLOR_ORANGE: Color = "orange";
 export const COLOR_RED: Color = "red";
 export const DEFAULT_TAP_MODE: TapMode = "green";
+export const DEFAULT_BEEPS_ENABLED = false;
 
 export const MIN_TABLE_ID = 1;
 export const MAX_TABLE_ID = 9999;
@@ -168,6 +169,7 @@ export type SessionClientMsg =
   | { type: "set_table_range"; start: number; end: number }
   | { type: "rename_session"; name: string }
   | { type: "set_tap_mode"; tap_mode: TapMode; locked: boolean }
+  | { type: "set_beep_mode"; enabled: boolean; locked: boolean }
   | { type: "end_session" }
   | { type: "ping" };
 
@@ -185,6 +187,8 @@ export type SessionServerMsg =
       viewer_count: number;
       tap_mode?: TapMode;
       tap_mode_locked?: boolean;
+      beeps_enabled?: boolean;
+      beeps_locked?: boolean;
       is_creator: boolean;
       unlisted_tables?: UnlistedTable[];
       server_now_ms: number;
@@ -211,6 +215,8 @@ export type SessionServerMsg =
       viewer_count: number;
       tap_mode?: TapMode;
       tap_mode_locked?: boolean;
+      beeps_enabled?: boolean;
+      beeps_locked?: boolean;
     }
   | { type: "serial_command"; command: SerialCommand }
   | { type: "unlisted_tables"; tables: UnlistedTable[] }

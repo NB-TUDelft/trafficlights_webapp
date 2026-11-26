@@ -78,6 +78,8 @@ describe("protocol hardening", () => {
       ...snapshotMsg(),
       tap_mode: "cycle",
       tap_mode_locked: true,
+      beeps_enabled: true,
+      beeps_locked: true,
     });
     expect(parsedSnap?.type).toBe("snapshot");
     if (parsedSnap?.type !== "snapshot") {
@@ -86,6 +88,8 @@ describe("protocol hardening", () => {
     let state = sessionReducer(initialSessionState, parsedSnap);
     expect(state.tapMode).toBe("cycle");
     expect(state.tapModeLocked).toBe(true);
+    expect(state.beepsEnabled).toBe(true);
+    expect(state.beepsLocked).toBe(true);
 
     const parsedMeta = parseSessionServerMsg({
       type: "session_meta",
@@ -94,6 +98,8 @@ describe("protocol hardening", () => {
       viewer_count: 4,
       tap_mode: "green",
       tap_mode_locked: false,
+      beeps_enabled: false,
+      beeps_locked: false,
     });
     expect(parsedMeta?.type).toBe("session_meta");
     if (parsedMeta?.type !== "session_meta") {
@@ -102,5 +108,7 @@ describe("protocol hardening", () => {
     state = sessionReducer(state, parsedMeta);
     expect(state.tapMode).toBe("green");
     expect(state.tapModeLocked).toBe(false);
+    expect(state.beepsEnabled).toBe(false);
+    expect(state.beepsLocked).toBe(false);
   });
 });
