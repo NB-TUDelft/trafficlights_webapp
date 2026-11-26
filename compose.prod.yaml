@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# The runtime contract: runs the image Actions published, with the variables
-# Coolify has to supply, so "the image is broken" can be told apart from
-# "Coolify is misconfigured". Not a deployment artifact either; Coolify runs
-# the image with its own settings (Docker Image build pack, the container port
-# in the Domain: https://<host>:3000).
+# Production compose contract: runs the image Actions published, with the
+# variables Coolify supplies. No host port is bound so Coolify's reverse proxy
+# can reach container port 3000 over the Docker network (set the container port
+# in the Domain: https://<host>:3000) without colliding on host port 3000 or
+# blocking rolling redeploys.
 #
 #   PUBLIC_ORIGIN=https://trafficlights.example.com \
 #     docker compose -f compose.prod.yaml config   # validate + print the resolved contract
-#   docker compose -f compose.prod.yaml up         # pull the tag and run it locally
 #
 # Required variables use `:?`, so a missing one fails with its name. Every
 # variable is documented in .env.example.
@@ -17,10 +16,10 @@ name: trafficlights-prod-contract
 
 services:
   trafficlights-webapp:
-    image: ${TRAFFICLIGHTS_IMAGE:-ghcr.io/nb-tudelft/trafficlights_webapp:main}
+    image: ghcr.io/nb-tudelft/trafficlights_webapp:main
     pull_policy: always
-    ports:
-      - "127.0.0.1:3000:3000"
+    expose:
+      - "3000"
     environment:
       # Exact public origin(s), comma-separated: the WebSocket upgrade's
       # Origin header must match one of them, which blocks cross-site
