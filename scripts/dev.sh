@@ -54,6 +54,24 @@ if [ -f .env ]; then
     set +a
 fi
 
+bind="${BIND:-127.0.0.1:3000}"
+vite_port="${VITE_PORT:-5173}"
+
+# Fails fast when another server (often another `make dev`) holds a port:
+# curl exits 7 only when nothing accepts the connection.
+port_free() {
+    command -v curl >/dev/null 2>&1 || return 0
+    probe=0
+    curl -s -o /dev/null --max-time 2 "http://$1/" 2>/dev/null || probe=$?
+    [ "$probe" -eq 7 ]
+}
+for address in "$bind" "127.0.0.1:$vite_port"; do
+    if ! port_free "$address"; then
+        echo "dev: $address is already in use (is another make dev running?)." >&2
+        exit 1
+    fi
+done
+
 if [ ! -d web/node_modules ]; then
     echo "Installing frontend dependencies with nub..."
     nub --cwd web install
@@ -67,8 +85,6 @@ if [ ! -f web/dist/index.html ]; then
     nub --cwd web run build
 fi
 
-bind="${BIND:-127.0.0.1:3000}"
-vite_port="${VITE_PORT:-5173}"
 server_pid=""
 vite_pid=""
 

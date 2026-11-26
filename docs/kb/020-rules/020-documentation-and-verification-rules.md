@@ -28,7 +28,9 @@ always_read: true
   save; the native Rust server on `127.0.0.1:3000` restarts when `crates/`
   change (polled each second, no watcher tool needed), rebuilding the browser
   WASM module first when `crates/proto` or `crates/wasm` change. A restart
-  ends in-memory sessions. Preview the production image with `make dev-up`
+  ends in-memory sessions. It refuses to start while `:3000` or `:5173` is
+  taken (often by another `make dev`). Preview the production image with
+  `make dev-up`
   (`docker compose -f compose.dev.yaml up --build` on
   `http://127.0.0.1:3000`, stopped with `make dev-down`).
 - When changing serial-handling code or browser UI, record what was tested

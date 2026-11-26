@@ -19,6 +19,8 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: devPort,
+    // Fail instead of moving to another port that `make dev` did not print.
+    strictPort: true,
     proxy: {
       "/api": backend,
       // WebSockets: `/ws/lobby` and `/ws/sessions/{id}`.
