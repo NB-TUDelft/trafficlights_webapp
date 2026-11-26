@@ -258,12 +258,6 @@ export function SessionManagementCard(props: Readonly<SessionManagementProps>) {
       <button type="button" onClick={props.onDownloadLog}>
         Download statistics (.jsonl)
       </button>
-      {props.collectNames === true ? (
-        <p className="muted-text">
-          Viewer names are collected: the statistics log names who changed each table, with you as
-          "host".
-        </p>
-      ) : null}
       {props.confirmEnd ? (
         <span className="inline-actions">
           <button type="button" className="danger-button" onClick={props.onConfirmEnd}>

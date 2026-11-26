@@ -63,14 +63,4 @@ describe("viewer names in the session view", () => {
     );
     expect(anonymous).not.toContain("Change name");
   });
-
-  it("tells the creator that names are collected", () => {
-    const html = render(
-      <SessionView {...viewProps(baseState({ isCreator: true, collectNames: true }))} />,
-    );
-    expect(html).toContain("Viewer names are collected");
-    expect(html).toContain("&quot;host&quot;");
-    const plain = render(<SessionView {...viewProps(baseState({ isCreator: true }))} />);
-    expect(plain).not.toContain("Viewer names are collected");
-  });
 });
