@@ -99,8 +99,11 @@ For a web-app change in a session with `"collect_names": true`:
   `"red"`), or `null` when an out-of-range table is heard for the first time
   (in-range tables start at `"green"`).
 - `next` (**string**) — new color (`"green"`, `"orange"`, `"red"`).
-- `source` (**string**) — origin of the transition:
-  - `"student_radio"` — reported by a student station over radio/serial.
+- `source` (**string**) — input channel of the transition:
+  - `"student_radio"` — reported by the physical station over radio/serial
+    (note: TAs and teachers often clear a light by pressing the physical button
+    at the table rather than clicking the web app, so `"student_radio"` cannot
+    be treated as "student self-resolved without TA help").
   - `"teacher_click"` — changed by clicking a single table tile in the web app.
   - `"teacher_reset_all"` — cleared by the creator's **Reset All To Green**
     action.
@@ -167,10 +170,19 @@ For a web-app change in a session with `"collect_names": true`:
    web-app transitions (`teacher_click`, `teacher_reset_all`, `range_reset`),
    never on `student_radio` or in non-collecting sessions.
 
-## Python plotting recipes
+## Offline plotting tool and Python recipes
 
-The examples below read a downloaded `stats.jsonl` file using `pandas` and
-`matplotlib` (`pip install pandas matplotlib`).
+The dedicated offline analytics and plotting CLI lives in the sibling repository
+`../trafficlights_analytics`
+([NB-TUDelft/trafficlights_analytics](https://github.com/NB-TUDelft/trafficlights_analytics),
+`AGPL-3.0-or-later`). Built on Matplotlib + NumPy, it parses `schema_version: 1`
+`.jsonl` files, merges physical micro:bit button-stepping transitions into
+single help episodes, computes both active-table and configured-range average
+states, flags `in_range: false` stations as hardware diagnostics, and emits a
+combined `00_dashboard.pdf`/`.svg` plus individual section PNGs (`01`–`05`).
+
+The standalone `pandas` + `matplotlib` snippets below remain as minimal
+reference recipes (`pip install pandas matplotlib`):
 
 ```python
 import json
@@ -281,37 +293,26 @@ plt.tight_layout()
 plt.show()
 
 # ------------------------------------------------------------
-# 4. Help wait-time distribution (student self-resolved vs. teacher)
+# 4. Help wait-time distribution (by peak color; source cannot distinguish
+#    who pressed the physical button at the table)
 # ------------------------------------------------------------
 need_help = in_range_states[in_range_states["next"].isin(["orange", "red"])]
 resolved = in_range_states[in_range_states["next"] == "green"]
 
-teacher_wait_s: list[float] = []
-self_wait_s: list[float] = []
+wait_s: list[float] = []
 for row in need_help.itertuples():
     later = resolved[
         (resolved["table"] == row.table) & (resolved["ts_ms"] > row.ts_ms)
     ]
     if not later.empty:
         first = later.iloc[0]
-        delta_s = (first["ts"] - row.ts).total_seconds()
-        if first["source"] == "student_radio":
-            self_wait_s.append(delta_s)
-        else:
-            teacher_wait_s.append(delta_s)
+        wait_s.append((first["ts"] - row.ts).total_seconds())
 
 plt.figure(figsize=(8, 4))
-plt.hist(
-    [teacher_wait_s, self_wait_s],
-    bins=20,
-    stacked=True,
-    label=["Teacher/TA resolved", "Student self-resolved"],
-    edgecolor="black",
-)
+plt.hist(wait_s, bins=20, edgecolor="black")
 plt.title("Time from orange/red until green")
-plt.xlabel("Seconds until resolved")
+plt.xlabel("Seconds until cleared")
 plt.ylabel("Count")
-plt.legend()
 plt.tight_layout()
 plt.show()
 

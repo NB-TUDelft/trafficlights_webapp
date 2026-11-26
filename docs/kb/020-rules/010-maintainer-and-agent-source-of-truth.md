@@ -3,9 +3,9 @@ summary: >-
   Names this knowledge base the single source of truth for maintainers and
   agents; `README.md` stays the public entry point; the one agent file,
   `AGENTS.md` (`CLAUDE.md` and `CODEX.md` are symlinks to it), stays
-  pointer-only, with no lowercase `agents.md`; `../trafficlights_firmware` is a
-  separate sibling repository read for protocol reference and not edited
-  unasked.
+  pointer-only, with no lowercase `agents.md`; `../trafficlights_firmware` and
+  `../trafficlights_analytics` are separate sibling repositories read for
+  protocol/schema compatibility and not edited unasked.
 always_read: true
 ---
 
@@ -23,14 +23,23 @@ rather than repeating them:
   to run and check it. Its developer notes stay short and point here.
 - `scripts/kb.sh`, `docs/kb/housekeeping.mjs` and `docs/kb/graphify.mjs`
   explain themselves in their header comments.
-- `old/` (once scaffolding starts) holds the original `fastapi_receiver.py` as
-  reference-only material outside the Rust/web build and quality gate,
-  following `../trafficlights_firmware`'s `old/` convention.
-- `../trafficlights_firmware` is the sibling firmware repository. Read its
-  knowledge base and `src/` when verifying the USB serial protocol or proposing
-  new serial commands, and summarize the interface in "Firmware serial
-  interface" (Reference) rather than duplicating firmware internals here. Do not
-  edit files in `../trafficlights_firmware` unless the maintainer asks.
+- `old/` holds the original `fastapi_receiver.py` as reference-only material
+  outside the Rust/web build and quality gate, following
+  `../trafficlights_firmware`'s `old/` convention.
+- `../trafficlights_firmware`
+  ([NB-TUDelft/trafficlights_firmware](https://github.com/NB-TUDelft/trafficlights_firmware))
+  is the sibling firmware repository. Read its knowledge base
+  (`../trafficlights_firmware/docs/kb/README.md`) and `src/` when verifying the
+  USB serial protocol, retrofit behavior, or proposing new serial commands, and
+  summarize the contract in "Firmware serial interface" (Reference) rather than
+  duplicating firmware internals here.
+- `../trafficlights_analytics`
+  ([NB-TUDelft/trafficlights_analytics](https://github.com/NB-TUDelft/trafficlights_analytics))
+  is the sibling offline analytics and plotting repository consuming exported
+  `.jsonl` logs. Coordinate any changes to `crates/proto/src/stats.rs` or
+  "Classroom statistics JSONL schema" (Reference) with it.
+- Do not edit files in `../trafficlights_firmware` or
+  `../trafficlights_analytics` unless the maintainer explicitly asks.
 
 There is one agent file, `AGENTS.md`, and it only points here; `CLAUDE.md` and
 `CODEX.md` are symlinks to it, so each agent finds it under the name it looks

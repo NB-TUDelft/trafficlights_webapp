@@ -87,21 +87,35 @@ Strength follows the maintainer's wording: **must** (required behavior),
 ## Already established from `trafficlights_firmware`
 
 Cross-repository facts from
-`../trafficlights_firmware/docs/kb/010-mission/020-requirements.md` (`2026-11-24`
-and `2026-11-25`) and `../trafficlights_firmware/old/` (details in "Firmware
-serial interface" under Reference):
+`../trafficlights_firmware/docs/kb/010-mission/020-requirements.md`,
+`../trafficlights_firmware/docs/kb/040-reference/070-webapp-cooperation-and-retrofit.md`,
+and live classroom tests (`2026-11-24` through `2026-11-26`; details in
+"Firmware serial interface" under Reference):
 
-- **Legacy serial wire rules (R14, firmware R7):** 115200 baud USB CDC serial
-  (`USB VID 0x0D28`), wake-up `\n` on connect, strictly `\n`-terminated
+- **Legacy serial and radio wire rules (R14, firmware R3, R7):** 115200 baud USB
+  CDC serial (`USB VID 0x0D28`), wake-up `\n` on connect, strictly `\n`-terminated
   validated `T,<table>,<color>\n` (`color` in `0..2`) and `T,-1,0\n` commands,
   accept `S` and `RS`, ignore `RT` echo, never emit malformed `T,...` lines
-  (old MakeCode lights index `colorList` unchecked).
+  (old MakeCode lights index `colorList` unchecked). On the air, MakeCode
+  packets are 32-byte frames (`01 00 01 02 <time> <serial=0> <len> <text>`) and
+  `radio.config(length=32)` is required on group `146`; the new firmware
+  receiver is non-transparent (decided `2026-11-26`), filters non-printable
+  ASCII, and drops malformed commands.
+- **Transparent mesh bridging (firmware R4, R5, `src/mesh.py`):** the new
+  firmware's 16-byte `0x4D` managed-flooding mesh frames coexist safely on group
+  `146` beside old MakeCode stations (verified at up to 10 frames/s). The
+  receiver sends every `T` command in both formats and prints deduplicated mesh
+  status frames as standard `S,<origin>,<color>` lines, requiring zero wire
+  change in `trafficlights_webapp`.
 - **New firmware control commands (firmware R13, R14):** `!get`, `!set
   mode=... id=...`, `!clear`, `!restart` answer `!ok ...` or `!err ...` with no
   commas; receiver has no ID; station ID `0` is reserved and unset stations
-  report `id=0`; valid assigned station IDs are `1` to `9999`.
-- **Target hardware (firmware R11):** micro:bit V2.21; ~128-byte UART RX
-  buffer, `MAX_LINE = 64` bytes.
+  report `id=0`; valid assigned station IDs are `1` to `9999`. `!get` answers
+  within `0.03 s` under live load, whereas `!set` / `!clear` can take up to
+  `1.24 s` during flash-page reclamation.
+- **Target hardware (firmware R11 + live retrofit `2026-11-26`):** micro:bit
+  V2.21 (`9906`) and V2.00 (`9904`, found on the live classroom receiver); ~128-byte
+  UART RX buffer, `MAX_LINE = 64` bytes.
 
 ## Still open (non-blocking for scaffolding)
 

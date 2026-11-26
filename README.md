@@ -4,19 +4,25 @@ Teacher web application for the classroom traffic lights system (hardware and
 legacy serial protocol originally introduced by
 [RolfHut/ClassroomIndicatorLights](https://github.com/RolfHut/ClassroomIndicatorLights)).
 It connects over USB serial (via the creator's browser Web Serial API and a
-lazy-loaded Rust/WASM protocol bridge) to a micro:bit V2 teacher receiver
-(whose replacement firmware lives in the sibling repository
-`../trafficlights_firmware`), broadcasts live classroom status over WebSockets
-from a Rust Axum server, tracks how long tables have been red, and lets
-teachers set individual tables, reset all tables to green, and download
-classroom statistics as `.jsonl`.
+lazy-loaded Rust/WASM protocol bridge) to either a legacy MakeCode micro:bit
+teacher receiver or a micro:bit V2 running the replacement firmware in the
+sibling repository `../trafficlights_firmware`
+([NB-TUDelft/trafficlights_firmware](https://github.com/NB-TUDelft/trafficlights_firmware)),
+broadcasts live classroom status over WebSockets from a Rust Axum server, tracks
+how long tables have been red, and lets teachers set individual tables, reset
+all tables to green, and download classroom statistics as `.jsonl` (analyzed
+offline by the companion CLI in `../trafficlights_analytics`,
+[NB-TUDelft/trafficlights_analytics](https://github.com/NB-TUDelft/trafficlights_analytics)).
 
-**Status:** v1 implementation complete and verified (`make gate`, `make sonar`
-quality gate `OK`, 47.5 MB distroless Docker image at 9.2 MiB RSS, headless
-Brave E2E). Ready for local development (`make dev` -> `http://127.0.0.1:5173`,
-or the production image via `make dev-up` -> `http://127.0.0.1:3000`),
-real micro:bit V2 USB verification, and Coolify deployment (see Work order and
-History in the knowledge base).
+**Status:** v1 implementation plus post-v1 polish (viewer name collection,
+optional custom head script, compact creator cards, unified header, watch-mode
+`make dev`) complete and verified (`make gate`, `make sonar` quality gate `OK`,
+47.5 MB distroless Docker image at 9.2 MiB RSS, headless Brave E2E). Verified
+live in a classroom (`2026-11-26`) on both the old MakeCode receiver and a
+retrofitted `trafficlights_firmware` V2.00 receiver with ~40 legacy stations and
+retrofitted station 43. Ready for remaining hardware checks (`T,-1,0` broadcast,
+live `mode=station` guard, mesh-relayed stations) and Coolify production
+bring-up (see Work order and History in the knowledge base).
 
 ## Knowledge base
 

@@ -34,7 +34,7 @@ web/                          # React 19 + Vite + TypeScript + Tailwind CSS v4 (
   public/icon.svg             # Custom funny cartoon traffic-light SVG icon
   src/wasm/                   # Generated wasm-bindgen JS/WASM bundle (gitignored, built by make/Docker)
 old/
-  fastapi_receiver.py         # Moved here as reference-only when scaffolding begins
+  fastapi_receiver.py         # Reference-only starting prototype (outside gate)
 Dockerfile                    # Four-stage build: wasm -> web -> builder -> distroless runner
 compose.dev.yaml              # Local production-image harness (127.0.0.1:3000)
 compose.prod.yaml             # Runtime contract for Coolify
@@ -87,8 +87,14 @@ Licensing).
       instead of `mode=receiver`.
     - If no `!ok` arrives within 1 s: automatically operates in **legacy
       MakeCode receiver** mode with zero error.
-  - Paces outgoing writes to protect the micro:bit's ~128-byte UART RX buffer,
-    requests Screen Wake Lock while streaming, and warns on tab unload.
+  - Paces outgoing writes (`25 ms`) to protect the micro:bit's ~128-byte UART
+    RX buffer, requests Screen Wake Lock while streaming, and warns on tab
+    unload.
+  - Works seamlessly across all four retrofit stages (legacy MakeCode receiver,
+    retrofitted `trafficlights_firmware` receiver, mixed legacy + new stations,
+    and full firmware mesh, where the receiver prints deduplicated mesh status
+    frames as standard `S,<id>,<color>` lines). See "Firmware serial interface"
+    (Reference) for the complete compatibility matrix and live-tested timings.
 
 ## Client–server protocol (R9, R11, R12)
 
@@ -232,7 +238,7 @@ millisecond timestamp `ts_ms` and elapsed session milliseconds `elapsed_ms`:
 | :--- | :--- | :--- |
 | `session_start` | `schema_version`, `session_id`, `name`, `ts_ms`, `range: {start, end}`, `collect_names?` | Session metadata header (`collect_names: true` written only when enabled) |
 | `receiver_status` | `ts_ms`, `elapsed_ms`, `connected`, `firmware?: {kind, mode?, version?}` | Masks offline gaps in plots; tracks legacy vs. new firmware |
-| `state_change` | `ts_ms`, `elapsed_ms`, `table`, `prev`, `next`, `source`, `in_range`, `actor?` | Reconstructs exact active color counts over time, per-table timelines, average state, wait/resolution times, student self-resolution vs. TA/teacher resolution (`source`: `student_radio`, `teacher_click`, `teacher_reset_all`, `range_reset`), and optional per-actor attribution (`actor`: viewer name or `"host"` for web-app changes in `collect_names` sessions) |
+| `state_change` | `ts_ms`, `elapsed_ms`, `table`, `prev`, `next`, `source`, `in_range`, `actor?` | Reconstructs exact active color counts over time, per-table timelines, average state, wait/resolution times, clearing channel (`source`: `student_radio` = physical device button—which may be pressed by a student or a visiting TA/teacher—vs. `teacher_click`, `teacher_reset_all`, `range_reset` via web app), and optional per-actor attribution (`actor`: viewer name or `"host"` for web-app changes in `collect_names` sessions) |
 | `range_change` | `ts_ms`, `elapsed_ms`, `prev_range`, `next_range` | Explains denominator changes in average-state plots |
 | `viewer_count` | `ts_ms`, `elapsed_ms`, `viewers` | Correlates TA/helper staffing with red-light wait times |
 | `session_end` | `ts_ms`, `elapsed_ms`, `reason` (`manual` \| `grace_timeout` \| `shutdown`) | Clean end marker for duration calculations |

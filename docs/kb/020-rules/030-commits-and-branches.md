@@ -1,13 +1,12 @@
 ---
 summary: >-
   Standing rules: git repository initialized on `2026-11-25` on `main` (root
-  commit `7fe9e60`, signed); target GitHub repository is
-  `https://github.com/NB-TUDelft/trafficlights_webapp` (renamed from
-  `NB-TUDelft/classroom_trafficlights`, which the maintainer will force-push
-  to); linear history on `main` with short imperative GPG-signed commits (no
-  type prefix; optional `Co-Authored-By:` trailer for multi-agent coworker
-  credit); signing is never
-  bypassed; agents do not push or add a remote unasked.
+  commit `7fe9e60`, signed); `origin` is configured at
+  `git@github.com:NB-TUDelft/trafficlights_webapp.git` (`https://github.com/NB-TUDelft/trafficlights_webapp`,
+  renamed from `NB-TUDelft/classroom_trafficlights`); linear history on `main`
+  with short imperative GPG-signed commits (no type prefix; optional
+  `Co-Authored-By:` trailer for multi-agent coworker credit); signing is never
+  bypassed; agents do not push or change remotes unasked.
 always_read: true
 ---
 
@@ -15,11 +14,12 @@ always_read: true
 
 - **The repository.** Initialized on `2026-11-25` with `git init` on `main` at
   the maintainer's request, starting with the untouched `fastapi_receiver.py`
-  as root commit `7fe9e60` (signed). The target GitHub repository is
-  `https://github.com/NB-TUDelft/trafficlights_webapp` (renamed from
-  `NB-TUDelft/classroom_trafficlights`); the maintainer stated on `2026-11-25`
-  that they will force-push this repository onto it. Adding the remote and
-  pushing stay the maintainer's to run or explicitly request.
+  as root commit `7fe9e60` (signed). The `origin` remote is configured at
+  `git@github.com:NB-TUDelft/trafficlights_webapp.git`
+  ([NB-TUDelft/trafficlights_webapp](https://github.com/NB-TUDelft/trafficlights_webapp),
+  renamed from `NB-TUDelft/classroom_trafficlights`; sibling to
+  `NB-TUDelft/trafficlights_firmware`) and `main` tracks `origin/main`. Pushing
+  or altering remotes stays the maintainer's to run or explicitly request.
 - **Signing.** The maintainer's global git configuration sets
   `commit.gpgsign = true`, `tag.gpgsign = true` and a signing key
   (`4858F11A2D1DFCBE`, checked `2026-11-25`). Commits and tags in this
