@@ -19,8 +19,8 @@ export function NamePrompt(props: Readonly<NamePromptProps>) {
     inputRef.current?.focus();
   }, []);
   return (
-    <div className="name-prompt-backdrop">
-      <dialog open={true} className="name-prompt" aria-modal="true" aria-labelledby="name-title">
+    <div className="modal-backdrop">
+      <dialog open={true} className="modal-dialog" aria-modal="true" aria-labelledby="name-title">
         <form
           className="control-card session-form"
           onSubmit={(event) => {
@@ -49,7 +49,7 @@ export function NamePrompt(props: Readonly<NamePromptProps>) {
             />
           </label>
           {props.error === null ? null : (
-            <p id="viewer-name-error" className="name-prompt-error" role="alert">
+            <p id="viewer-name-error" className="modal-error" role="alert">
               {props.error}
             </p>
           )}

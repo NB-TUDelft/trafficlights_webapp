@@ -85,6 +85,17 @@ function viewerNameProps(viewer: ViewerNameState) {
   };
 }
 
+function rangeDialogProps(range: UiState["rangeDialog"]) {
+  return {
+    rangeStart: range.rangeStart,
+    rangeEnd: range.rangeEnd,
+    rangeDialogOpen: range.rangeDialogOpen,
+    rangeError: range.rangeError,
+    onRangeStartChange: range.setRangeStart,
+    onRangeEndChange: range.setRangeEnd,
+  };
+}
+
 function buildViewProps(args: ViewPropsArgs): SessionViewProps {
   const { state, ui, serialBridge, handlers } = args;
   const tapModeLocked = state.isCreator ? ui.hostTapModeLocked : state.tapModeLocked;
@@ -107,8 +118,6 @@ function buildViewProps(args: ViewPropsArgs): SessionViewProps {
     serialSupported: isWebSerialSupported(),
     serialBusy: serialBridge.serialBusy,
     showAllPorts: ui.showAllPorts,
-    rangeStart: ui.rangeStart,
-    rangeEnd: ui.rangeEnd,
     renameValue: ui.renameValue,
     confirmEnd: ui.confirmEnd,
     onDismissError: () => {
@@ -117,12 +126,11 @@ function buildViewProps(args: ViewPropsArgs): SessionViewProps {
         state.error === null ? null : `${state.error.code}:${state.error.message}`,
       );
     },
-    onRangeStartChange: ui.setRangeStart,
-    onRangeEndChange: ui.setRangeEnd,
     onRenameChange: ui.setRenameValue,
     onShowAllChange: ui.setShowAllPorts,
     onAskEnd: () => ui.setConfirmEnd(true),
     onCancelEnd: () => ui.setConfirmEnd(false),
+    ...rangeDialogProps(ui.rangeDialog),
     ...viewerNameProps(args.viewer),
     ...handlers,
   };
@@ -166,8 +174,7 @@ function SessionConsole({ sessionId }: { sessionId: string }) {
     setLocalTapMode: ui.setLocalTapMode,
     setHostTapMode: ui.setHostTapMode,
     setHostTapModeLocked: ui.setHostTapModeLocked,
-    rangeStart: ui.rangeStart,
-    rangeEnd: ui.rangeEnd,
+    ...ui.rangeDialog,
     renameValue: ui.renameValue,
     sessionId,
     showAllPorts: ui.showAllPorts,

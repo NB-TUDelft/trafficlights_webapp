@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { firmwareBadgeLabel } from "@/lib/firmware";
-import type { FirmwareInfo, TapMode } from "@/protocol/types";
-import { MAX_TABLE_ID, MIN_TABLE_ID } from "@/protocol/types";
+import type { FirmwareInfo, TableRange, TapMode } from "@/protocol/types";
 import { ToggleSwitch } from "./ToggleSwitch";
 
 export interface SerialCardProps {
@@ -66,49 +65,6 @@ export function SerialConnectionCard(props: Readonly<SerialCardProps>) {
   );
 }
 
-export interface RangeCardProps {
-  startValue: string;
-  endValue: string;
-  onStartChange: (value: string) => void;
-  onEndChange: (value: string) => void;
-  onApply: () => void;
-}
-
-export function TableRangeCard(props: Readonly<RangeCardProps>) {
-  return (
-    <article className="control-card">
-      <h2 className="card-label">Table Range</h2>
-      <div className="range-inputs">
-        <label htmlFor="range-start">
-          <span>Start</span>
-          <input
-            id="range-start"
-            type="number"
-            min={MIN_TABLE_ID}
-            max={MAX_TABLE_ID}
-            value={props.startValue}
-            onChange={(event) => props.onStartChange(event.target.value)}
-          />
-        </label>
-        <label htmlFor="range-end">
-          <span>End</span>
-          <input
-            id="range-end"
-            type="number"
-            min={MIN_TABLE_ID}
-            max={MAX_TABLE_ID}
-            value={props.endValue}
-            onChange={(event) => props.onEndChange(event.target.value)}
-          />
-        </label>
-      </div>
-      <button type="button" onClick={props.onApply}>
-        Apply Range
-      </button>
-    </article>
-  );
-}
-
 function tapModeHint(tapMode: TapMode, lockedForViewer: boolean): string {
   const modeText = tapMode === "cycle" ? "Tap cycles colors" : "Tap resets to green";
   return lockedForViewer ? `Locked by host · ${modeText}` : modeText;
@@ -133,42 +89,47 @@ export interface QuickActionsProps {
   onToggleTapModeLock: () => void;
 }
 
+/** Spans two grid columns on wide screens, with its switches in a grid. */
 export function QuickActionsCard(props: Readonly<QuickActionsProps>) {
   return (
-    <article className="control-card">
-      <h2 className="card-label">Quick Actions</h2>
+    <article className="control-card quick-actions-card">
+      <div className="card-head">
+        <h2 className="card-label">Quick Actions</h2>
+        <span className="muted-text">{props.viewerCount} viewers connected</span>
+      </div>
       <button type="button" disabled={!props.receiverConnected} onClick={props.onResetAll}>
         Reset All To Green
       </button>
-      <ToggleSwitch
-        id="host-beeps"
-        label="Alert beeps"
-        hint={beepHint(props.beepsEnabled, false)}
-        checked={props.beepsEnabled}
-        onToggle={props.onToggleBeeps}
-      />
-      <ToggleSwitch
-        id="host-beeps-lock"
-        label="Lock beeps"
-        hint={props.beepsLocked ? "Viewers follow host" : "Viewers choose own"}
-        checked={props.beepsLocked}
-        onToggle={props.onToggleBeepsLock}
-      />
-      <ToggleSwitch
-        id="host-tap-mode"
-        label="Cycle on tap"
-        hint={tapModeHint(props.tapMode, false)}
-        checked={props.tapMode === "cycle"}
-        onToggle={props.onToggleTapMode}
-      />
-      <ToggleSwitch
-        id="host-tap-lock"
-        label="Lock tap mode"
-        hint={props.tapModeLocked ? "Viewers follow host" : "Viewers choose own"}
-        checked={props.tapModeLocked}
-        onToggle={props.onToggleTapModeLock}
-      />
-      <p className="muted-text">{props.viewerCount} viewers connected</p>
+      <div className="switch-grid">
+        <ToggleSwitch
+          id="host-beeps"
+          label="Alert beeps"
+          hint={beepHint(props.beepsEnabled, false)}
+          checked={props.beepsEnabled}
+          onToggle={props.onToggleBeeps}
+        />
+        <ToggleSwitch
+          id="host-beeps-lock"
+          label="Lock beeps"
+          hint={props.beepsLocked ? "Viewers follow host" : "Viewers choose own"}
+          checked={props.beepsLocked}
+          onToggle={props.onToggleBeepsLock}
+        />
+        <ToggleSwitch
+          id="host-tap-mode"
+          label="Cycle on tap"
+          hint={tapModeHint(props.tapMode, false)}
+          checked={props.tapMode === "cycle"}
+          onToggle={props.onToggleTapMode}
+        />
+        <ToggleSwitch
+          id="host-tap-lock"
+          label="Lock tap mode"
+          hint={props.tapModeLocked ? "Viewers follow host" : "Viewers choose own"}
+          checked={props.tapModeLocked}
+          onToggle={props.onToggleTapModeLock}
+        />
+      </div>
     </article>
   );
 }
@@ -227,13 +188,14 @@ export function AudioInfoCard(props: Readonly<AudioInfoProps>) {
 }
 
 export interface SessionManagementProps {
-  /** Whether the session collects viewer names. */
-  collectNames?: boolean;
   renameValue: string;
+  /** The session's current table range, shown on the button that changes it. */
+  range: TableRange;
   confirmEnd: boolean;
   onRenameChange: (value: string) => void;
   onRename: () => void;
   onDownloadLog: () => void;
+  onOpenRange: () => void;
   onAskEnd: () => void;
   onConfirmEnd: () => void;
   onCancelEnd: () => void;
@@ -243,20 +205,28 @@ export function SessionManagementCard(props: Readonly<SessionManagementProps>) {
   return (
     <article className="control-card">
       <h2 className="card-label">Session Management</h2>
-      <label htmlFor="rename-session">
-        <span>Session name</span>
+      <form
+        className="inline-field"
+        onSubmit={(event) => {
+          event.preventDefault();
+          props.onRename();
+        }}
+      >
         <input
           id="rename-session"
           type="text"
+          aria-label="Session name"
+          placeholder="Session name"
           value={props.renameValue}
           onChange={(event) => props.onRenameChange(event.target.value)}
         />
-      </label>
-      <button type="button" onClick={props.onRename}>
-        Rename
-      </button>
+        <button type="submit">Rename</button>
+      </form>
       <button type="button" onClick={props.onDownloadLog}>
         Download statistics (.jsonl)
+      </button>
+      <button type="button" aria-haspopup="dialog" onClick={props.onOpenRange}>
+        {`Table range ${props.range.start}–${props.range.end}`}
       </button>
       {props.confirmEnd ? (
         <span className="inline-actions">

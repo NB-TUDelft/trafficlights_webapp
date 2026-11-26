@@ -32,7 +32,7 @@ describe("viewer names in the session view", () => {
       />,
     );
     expect(html).toContain('<main class="page" inert=""');
-    expect(html).toContain('<dialog open="" class="name-prompt"');
+    expect(html).toContain('<dialog open="" class="modal-dialog"');
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain("Your name");
     expect(html).toContain('id="viewer-name"');

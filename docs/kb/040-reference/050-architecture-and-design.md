@@ -190,13 +190,18 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
     serial controls, no Table Range, no Reset All To Green.
   - **Creator view** (automatically enabled when browser holds matching
     `creator_token` for `{id}`): adds Serial Connection panel (connect,
-    reconnect, firmware badge, wrong-mode station warning), Table Range card,
-    `Reset All To Green`, Alert-beeps + Lock-beeps and Cycle-on-tap +
-    Lock-tap-mode switches in Quick Actions, session rename, subtle **"Unlisted
-    tables heard"** banner (e.g. catching unset ID `0` or misnumbered
-    stations), **Download statistics (.jsonl)** button (with a note when viewer
-    names are collected and the creator is logged as `"host"`), and **End
-    session** button.
+    reconnect, firmware badge, wrong-mode station warning), Quick Actions
+    (two grid columns wide on screens of at least 720 px: viewer count,
+    `Reset All To Green`, and Alert-beeps + Lock-beeps and Cycle-on-tap +
+    Lock-tap-mode switches in a grid of at most two columns), Session
+    Management (inline rename, **Download statistics (.jsonl)**, a **Table
+    range `start`–`end`** button that opens a modal popup (`TableRangeDialog`:
+    Start/End inputs, inline validation error, Escape or an outside press
+    closes it, focus returns to the button; applying resets lit tables to
+    green), and **End session**), and a subtle **"Unlisted tables heard"**
+    banner (e.g. catching unset ID `0` or misnumbered stations). On screens of
+    at least 1080 px the four creator cards sit in one row (Serial, Quick
+    Actions ×2, Session Management ×1.35, Longest On Red).
 
 ## Session lifecycle and disconnect grace period
 

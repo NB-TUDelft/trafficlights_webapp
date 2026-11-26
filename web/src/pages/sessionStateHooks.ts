@@ -10,7 +10,7 @@ import {
   hasCreatorToken,
   saveViewerName,
 } from "@/protocol/storage";
-import type { SessionClientMsg, TapMode } from "@/protocol/types";
+import type { SessionClientMsg, TableRange, TapMode } from "@/protocol/types";
 import {
   DEFAULT_BEEPS_ENABLED,
   DEFAULT_TAP_MODE,
@@ -22,6 +22,26 @@ import { CreatorSerialBridge } from "@/serial/bridge";
 import { takePendingSerialPort } from "@/serial/pending";
 import type { SerialPortLike, SerialStatusUpdate } from "@/serial/types";
 
+/** The creator's table-range popup: open flag, input drafts, and inline error. */
+function useRangeDialogState(range: TableRange) {
+  const [rangeStart, setRangeStart] = useState(String(range.start));
+  const [rangeEnd, setRangeEnd] = useState(String(range.end));
+  const [rangeDialogOpen, setRangeDialogOpen] = useState(false);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  useEffect(() => setRangeStart(String(range.start)), [range.start]);
+  useEffect(() => setRangeEnd(String(range.end)), [range.end]);
+  return {
+    rangeStart,
+    setRangeStart,
+    rangeEnd,
+    setRangeEnd,
+    rangeDialogOpen,
+    setRangeDialogOpen,
+    rangeError,
+    setRangeError,
+  };
+}
+
 export function useSessionUiState(state: SessionState) {
   const [localBeepsEnabled, setLocalBeepsEnabled] = useState(DEFAULT_BEEPS_ENABLED);
   const [hostBeepsEnabled, setHostBeepsEnabled] = useState(state.beepsEnabled);
@@ -32,13 +52,10 @@ export function useSessionUiState(state: SessionState) {
   const [hostTapModeLocked, setHostTapModeLocked] = useState(state.tapModeLocked);
   const [transientError, setTransientError] = useState<string | null>(null);
   const [showAllPorts, setShowAllPorts] = useState(false);
-  const [rangeStart, setRangeStart] = useState(String(state.range.start));
-  const [rangeEnd, setRangeEnd] = useState(String(state.range.end));
+  const rangeDialog = useRangeDialogState(state.range);
   const [renameValue, setRenameValue] = useState("");
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
-  useEffect(() => setRangeStart(String(state.range.start)), [state.range.start]);
-  useEffect(() => setRangeEnd(String(state.range.end)), [state.range.end]);
   useEffect(() => setRenameValue(state.name), [state.name]);
   useEffect(() => setHostTapMode(state.tapMode), [state.tapMode]);
   useEffect(() => setHostTapModeLocked(state.tapModeLocked), [state.tapModeLocked]);
@@ -63,10 +80,7 @@ export function useSessionUiState(state: SessionState) {
     setTransientError,
     showAllPorts,
     setShowAllPorts,
-    rangeStart,
-    setRangeStart,
-    rangeEnd,
-    setRangeEnd,
+    rangeDialog,
     renameValue,
     setRenameValue,
     confirmEnd,

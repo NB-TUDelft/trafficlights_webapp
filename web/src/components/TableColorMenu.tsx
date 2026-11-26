@@ -83,9 +83,9 @@ export interface EventTargetLike {
   ) => void;
 }
 
-export function attachMenuDismiss(
+/** Calls `onClose` on Escape or a press outside; returns the cleanup. */
+export function attachOutsideDismiss(
   doc: EventTargetLike,
-  win: EventTargetLike,
   isInside: (target: unknown) => boolean,
   onClose: () => void,
 ): () => void {
@@ -104,11 +104,24 @@ export function attachMenuDismiss(
   };
   doc.addEventListener("pointerdown", onPointerDown, true);
   doc.addEventListener("keydown", onKeyDown);
-  win.addEventListener("resize", onClose);
-  win.addEventListener("scroll", onClose, true);
   return () => {
     doc.removeEventListener("pointerdown", onPointerDown, true);
     doc.removeEventListener("keydown", onKeyDown);
+  };
+}
+
+/** Like `attachOutsideDismiss`, and also closes the menu on resize or scroll. */
+export function attachMenuDismiss(
+  doc: EventTargetLike,
+  win: EventTargetLike,
+  isInside: (target: unknown) => boolean,
+  onClose: () => void,
+): () => void {
+  const detachOutside = attachOutsideDismiss(doc, isInside, onClose);
+  win.addEventListener("resize", onClose);
+  win.addEventListener("scroll", onClose, true);
+  return () => {
+    detachOutside();
     win.removeEventListener("resize", onClose);
     win.removeEventListener("scroll", onClose, true);
   };

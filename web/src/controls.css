@@ -209,8 +209,8 @@ button.table-context-item[data-option="red"][aria-checked="true"] {
   }
 }
 
-/* --- Viewer name prompt --- */
-.name-prompt-backdrop {
+/* --- Modal popups (viewer name prompt, creator table range) --- */
+.modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 70;
@@ -220,7 +220,7 @@ button.table-context-item[data-option="red"][aria-checked="true"] {
   background: rgb(2 6 23 / 80%);
 }
 
-dialog.name-prompt {
+dialog.modal-dialog {
   position: static;
   width: min(100%, 26rem);
   margin: 0;
@@ -230,7 +230,7 @@ dialog.name-prompt {
   color: inherit;
 }
 
-.name-prompt-error {
+.modal-error {
   margin: 0;
   color: var(--red);
 }

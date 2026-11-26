@@ -1,0 +1,51 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Session console card grid: the creator layout, card headers, switch grid, and inline fields. */
+
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+/* Creator cards: Serial, Quick Actions (two columns wide), Session Management, Longest On Red. */
+@media (min-width: 720px) {
+  .control-grid-creator {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .control-grid-creator .quick-actions-card,
+  .control-grid-creator .red-card {
+    grid-column: span 2;
+  }
+}
+
+@media (min-width: 1080px) {
+  /* Session Management is a little wider so its buttons stay on one line. */
+  .control-grid-creator {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+
+  .control-grid-creator .red-card {
+    grid-column: auto;
+  }
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.8rem;
+}
+
+/* At most two columns (each setting beside its lock), one when two do not fit. */
+.switch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(10.5rem, calc((100% - 0.5rem) / 2)), 1fr));
+  gap: 0.5rem;
+}
+
+.inline-field {
+  display: flex;
+  gap: 0.5rem;
+}

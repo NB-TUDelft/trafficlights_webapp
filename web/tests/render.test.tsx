@@ -77,7 +77,7 @@ describe("session view role split", () => {
     expect(html).not.toContain("Lock beeps");
     expect(html).not.toContain("Lock tap mode");
     expect(html).not.toContain("Reset All To Green");
-    expect(html).not.toContain("Table Range");
+    expect(html).not.toContain("Table range");
     expect(html).not.toContain("Serial Connection");
     expect(html).not.toContain("End session");
     expect(html).not.toContain("Download statistics");
@@ -111,7 +111,11 @@ describe("session view role split", () => {
     expect(html).toContain("Cycle on tap");
     expect(html).toContain("Lock tap mode");
     expect(html).toContain("Reset All To Green");
-    expect(html).toContain("Table Range");
+    expect(html).toContain("quick-actions-card");
+    expect(html).toContain("switch-grid");
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("Table range 1–60");
+    expect(html).not.toContain("Apply range");
     expect(html).toContain("Serial Connection");
     expect(html).toContain("End session");
     expect(html).toContain("Download statistics (.jsonl)");

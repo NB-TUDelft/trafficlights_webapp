@@ -6,13 +6,13 @@ import {
   QuickActionsCard,
   SerialConnectionCard,
   SessionManagementCard,
-  TableRangeCard,
 } from "@/components/CreatorPanels";
 import { Footer } from "@/components/Footer";
 import { LongestOnRed } from "@/components/LongestOnRed";
 import { NamePrompt } from "@/components/NamePrompt";
 import { SessionHeader, type SessionStatusKind } from "@/components/SessionHeader";
 import { TableGrid } from "@/components/TableGrid";
+import { TableRangeDialog } from "@/components/TableRangeDialog";
 import type { SocketStatus } from "@/lib/socket";
 import { computeLongestOnRed } from "@/lib/time";
 import type { SessionState } from "@/protocol/reducers";
@@ -65,6 +65,9 @@ export interface SessionViewProps {
   showAllPorts: boolean;
   rangeStart: string;
   rangeEnd: string;
+  /** Whether the creator's table-range popup is open. */
+  rangeDialogOpen: boolean;
+  rangeError: string | null;
   renameValue: string;
   confirmEnd: boolean;
   /** The name this viewer gave, in a session that collects names. */
@@ -89,6 +92,8 @@ export interface SessionViewProps {
   onShowAllChange: (value: boolean) => void;
   onRangeStartChange: (value: string) => void;
   onRangeEndChange: (value: string) => void;
+  onOpenRange: () => void;
+  onCancelRange: () => void;
   onApplyRange: () => void;
   onResetAll: () => void;
   onRenameChange: (value: string) => void;
@@ -113,13 +118,6 @@ function CreatorControls(props: Readonly<SessionViewProps>) {
         onConnect={props.onConnectSerial}
         onDisconnect={props.onDisconnectSerial}
       />
-      <TableRangeCard
-        startValue={props.rangeStart}
-        endValue={props.rangeEnd}
-        onStartChange={props.onRangeStartChange}
-        onEndChange={props.onRangeEndChange}
-        onApply={props.onApplyRange}
-      />
       <QuickActionsCard
         receiverConnected={props.state.receiverConnected}
         beepsEnabled={props.beepsEnabled}
@@ -134,12 +132,13 @@ function CreatorControls(props: Readonly<SessionViewProps>) {
         onToggleTapModeLock={props.onToggleTapModeLock}
       />
       <SessionManagementCard
-        collectNames={props.state.collectNames}
         renameValue={props.renameValue}
+        range={props.state.range}
         confirmEnd={props.confirmEnd}
         onRenameChange={props.onRenameChange}
         onRename={props.onRename}
         onDownloadLog={props.onDownloadLog}
+        onOpenRange={props.onOpenRange}
         onAskEnd={props.onAskEnd}
         onConfirmEnd={props.onConfirmEnd}
         onCancelEnd={props.onCancelEnd}
@@ -176,10 +175,26 @@ function SessionBanners(props: Readonly<SessionViewProps>) {
   );
 }
 
+/** Whether a modal popup covers the page, which then makes `<main>` inert. */
+function modalOpen(props: Readonly<SessionViewProps>): boolean {
+  return props.namePromptOpen || (props.state.isCreator && props.rangeDialogOpen);
+}
+
 export function SessionView(props: Readonly<SessionViewProps>) {
   return (
     <>
       <SessionMain {...props} />
+      {props.state.isCreator && props.rangeDialogOpen ? (
+        <TableRangeDialog
+          startValue={props.rangeStart}
+          endValue={props.rangeEnd}
+          error={props.rangeError}
+          onStartChange={props.onRangeStartChange}
+          onEndChange={props.onRangeEndChange}
+          onApply={props.onApplyRange}
+          onCancel={props.onCancelRange}
+        />
+      ) : null}
       {props.namePromptOpen ? (
         <NamePrompt
           draft={props.nameDraft}
@@ -198,7 +213,7 @@ function SessionMain(props: Readonly<SessionViewProps>) {
   const { state } = props;
   const longest = computeLongestOnRed(state.tables, props.nowMs, state.clockOffsetMs);
   return (
-    <main className="page" inert={props.namePromptOpen}>
+    <main className="page" inert={modalOpen(props)}>
       <SessionHeader
         name={state.name}
         counts={state.counts}

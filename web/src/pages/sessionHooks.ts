@@ -8,7 +8,7 @@ import { parseSessionServerMsg } from "@/protocol/parse-session";
 import type { SessionState } from "@/protocol/reducers";
 import { getCreatorToken, getViewerKey, getViewerName } from "@/protocol/storage";
 import type { Color, SessionServerMsg } from "@/protocol/types";
-import { isValidTableRange, normalizeSessionName } from "@/protocol/types";
+import { normalizeSessionName } from "@/protocol/types";
 import type { CreatorSerialBridge } from "@/serial/bridge";
 import { requestMicrobitPort } from "@/serial/loader";
 import type { SerialPortLike } from "@/serial/types";
@@ -20,8 +20,12 @@ import {
   toggleTapMode,
   toggleTapModeLock,
 } from "./sessionModeHandlers";
-
-const PARSE_RADIX = 10;
+import {
+  applyRangeDialog,
+  closeRangeDialog,
+  openRangeDialog,
+  type RangeDialogArgs,
+} from "./tableRange";
 
 export interface Ref<T> {
   current: T;
@@ -118,13 +122,11 @@ export function useBeeps(
   }, [state.tables, beepsEnabled, mutedTables, prevColorsRef]);
 }
 
-export interface HandlersArgs extends ModeHandlersArgs {
+export interface HandlersArgs extends ModeHandlersArgs, Omit<RangeDialogArgs, "range"> {
   state: SessionState;
   setTransientError: (value: string | null) => void;
   setMutedTables: (updater: (prev: ReadonlySet<number>) => ReadonlySet<number>) => void;
   beepsEnabled: boolean;
-  rangeStart: string;
-  rangeEnd: string;
   renameValue: string;
   sessionId: string;
   showAllPorts: boolean;
@@ -158,7 +160,9 @@ export function useSessionHandlers(args: HandlersArgs) {
   const onDisconnectSerial = useCallback(() => {
     args.bridgeRef.current?.disconnect().catch(() => undefined);
   }, [args]);
-  const onApplyRange = useCallback(() => applyRange(args), [args]);
+  const onOpenRange = useCallback(() => openRangeDialog(rangeDialogArgs(args)), [args]);
+  const onCancelRange = useCallback(() => closeRangeDialog(rangeDialogArgs(args)), [args]);
+  const onApplyRange = useCallback(() => applyRangeDialog(rangeDialogArgs(args)), [args]);
   const onResetAll = useCallback(() => args.send({ type: "reset_all" }), [args]);
   const onRename = useCallback(() => applyRename(args), [args]);
   const onDownloadLog = useCallback(() => {
@@ -177,6 +181,8 @@ export function useSessionHandlers(args: HandlersArgs) {
     onToggleTapModeLock,
     onConnectSerial,
     onDisconnectSerial,
+    onOpenRange,
+    onCancelRange,
     onApplyRange,
     onResetAll,
     onRename,
@@ -194,14 +200,8 @@ async function connectFromPicker(args: HandlersArgs): Promise<void> {
   }
 }
 
-function applyRange(args: HandlersArgs): void {
-  const start = Number.parseInt(args.rangeStart, PARSE_RADIX);
-  const end = Number.parseInt(args.rangeEnd, PARSE_RADIX);
-  if (!isValidTableRange(start, end)) {
-    args.setTransientError("Enter a valid table range (start <= end, 1-9999).");
-    return;
-  }
-  args.send({ type: "set_table_range", start, end });
+function rangeDialogArgs(args: HandlersArgs): RangeDialogArgs {
+  return { ...args, range: args.state.range };
 }
 
 function applyRename(args: HandlersArgs): void {
