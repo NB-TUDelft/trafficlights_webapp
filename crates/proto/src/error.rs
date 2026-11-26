@@ -45,6 +45,15 @@ pub enum ProtoError {
         reason: &'static str,
     },
 
+    /// A viewer name that is empty, too long, contains control characters,
+    /// or claims the creator's reserved name `host`. The reason is a fixed,
+    /// human-readable explanation.
+    #[error("invalid viewer name: {reason}")]
+    InvalidViewerName {
+        /// Why the name was rejected.
+        reason: &'static str,
+    },
+
     /// A serial line longer than the firmware's `MAX_LINE` budget.
     ///
     /// Nothing in this crate currently returns this variant (the command
@@ -89,6 +98,13 @@ mod tests {
             }
             .to_string(),
             "invalid session name: must not be empty"
+        );
+        assert_eq!(
+            ProtoError::InvalidViewerName {
+                reason: "must not be empty"
+            }
+            .to_string(),
+            "invalid viewer name: must not be empty"
         );
         assert_eq!(
             ProtoError::LineTooLong { len: 65, max: 64 }.to_string(),

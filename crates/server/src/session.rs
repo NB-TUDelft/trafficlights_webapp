@@ -20,6 +20,13 @@
 //!   newer authenticated connection (a refreshed tab, a second device)
 //!   supersedes the older one, which is closed.
 //!
+//! In a session that collects viewer names, a connection other than the
+//! creator must `identify` before its `set_table` is accepted. The name is
+//! kept for that connection only, never broadcast, and written to the
+//! statistics log as the `actor` of its changes; the creator is always
+//! logged as `host`, both for its own clicks and for the changes only it
+//! can cause (Reset All, a range change).
+//!
 //! The receiver (the creator's browser serial bridge) is connected only
 //! while the current creator says so. Whenever it stops being connected,
 //! the disconnect-grace watchdog is armed; it is canceled only when the
@@ -32,9 +39,9 @@ use std::time::Instant;
 
 use tokio::task::AbortHandle;
 use trafficlights_proto::{
-    normalize_session_name, ChangeSource, Color, EndReason, FirmwareInfo, FirmwareMode, JsonlEvent,
-    SerialCommand, SessionClientMsg, SessionServerMsg, SessionSummary, TableRange, TapMode,
-    MAX_STATION_ID,
+    normalize_session_name, normalize_viewer_name, ChangeSource, Color, EndReason, FirmwareInfo,
+    FirmwareMode, JsonlEvent, SerialCommand, SessionClientMsg, SessionServerMsg, SessionSummary,
+    TableRange, TapMode, HOST_ACTOR, MAX_STATION_ID,
 };
 
 use crate::board::Board;
@@ -46,6 +53,8 @@ use crate::state::{now_ms, AppState, Lookup, SessionCell, MAX_RANGE_LEN};
 const MAX_PORT_LABEL_CHARS: usize = 120;
 /// Longest firmware version string kept, in characters.
 const MAX_FIRMWARE_VERSION_CHARS: usize = 64;
+/// Longest viewer key kept from `identify`, in bytes.
+const MAX_VIEWER_KEY_BYTES: usize = 64;
 /// Creator state-mutating messages: burst allowed at once.
 pub const CREATOR_MUTATION_BURST: u32 = 200;
 /// Creator state-mutating messages: refill per second.
@@ -97,9 +106,12 @@ pub struct Session {
     tap_mode_locked: bool,
     beeps_enabled: bool,
     beeps_locked: bool,
+    collect_names: bool,
     creator: Option<Client>,
     viewers: HashMap<ConnId, Client>,
     pending: HashMap<ConnId, Client>,
+    /// Names given with `identify`, by connection (never the creator's).
+    viewer_names: HashMap<ConnId, ViewerName>,
     pub(crate) log: SessionLog,
     grace_generation: u64,
     grace_task: Option<AbortHandle>,
@@ -110,7 +122,15 @@ pub struct Session {
 
 impl Session {
     /// A fresh all-green session whose receiver is not yet connected.
-    pub fn new(id: String, name: String, range: TableRange, now_ms: i64, log: SessionLog) -> Self {
+    /// `collect_names` is fixed for the session's lifetime.
+    pub fn new(
+        id: String,
+        name: String,
+        range: TableRange,
+        collect_names: bool,
+        now_ms: i64,
+        log: SessionLog,
+    ) -> Self {
         Self {
             id,
             name,
@@ -123,9 +143,11 @@ impl Session {
             tap_mode_locked: false,
             beeps_enabled: false,
             beeps_locked: false,
+            collect_names,
             creator: None,
             viewers: HashMap::new(),
             pending: HashMap::new(),
+            viewer_names: HashMap::new(),
             log,
             grace_generation: 0,
             grace_task: None,
@@ -195,7 +217,27 @@ impl Session {
         let mut clients: Vec<Client> = self.viewers.drain().map(|(_, client)| client).collect();
         clients.extend(self.pending.drain().map(|(_, client)| client));
         clients.extend(self.creator.take());
+        self.viewer_names.clear();
         clients
+    }
+
+    /// Who the statistics log names for a change made by connection `id`:
+    /// nobody unless the session collects names; then [`HOST_ACTOR`] for
+    /// the creator and the given name for anyone else (`None` before that
+    /// connection identified, which `set_table` refuses).
+    fn actor(&self, id: ConnId) -> Option<String> {
+        if !self.collect_names {
+            return None;
+        }
+        if self.is_creator(id) {
+            return Some(HOST_ACTOR.to_string());
+        }
+        self.viewer_names.get(&id).map(|viewer| viewer.name.clone())
+    }
+
+    /// The actor of changes only the creator can cause.
+    fn host_actor(&self) -> Option<String> {
+        self.collect_names.then(|| HOST_ACTOR.to_string())
     }
 
     fn is_creator(&self, id: ConnId) -> bool {
@@ -246,6 +288,7 @@ impl Session {
             tap_mode_locked: self.tap_mode_locked,
             beeps_enabled: self.beeps_enabled,
             beeps_locked: self.beeps_locked,
+            collect_names: self.collect_names,
             is_creator,
             unlisted_tables: if is_creator {
                 self.board.unlisted_tables()
@@ -365,29 +408,40 @@ impl Session {
         self.surface_log_failure(failed);
     }
 
-    async fn log_state_change(
-        &mut self,
-        now: i64,
-        table: u16,
-        prev: Option<Color>,
-        next: Color,
-        source: ChangeSource,
-        in_range: bool,
-    ) {
+    async fn log_state_change(&mut self, now: i64, change: Transition) {
         let failed = self
             .log
             .record(now, |ts_ms, elapsed_ms| JsonlEvent::StateChange {
                 ts_ms,
                 elapsed_ms,
-                table,
-                prev,
-                next,
-                source,
-                in_range,
+                table: change.table,
+                prev: change.prev,
+                next: change.next,
+                source: change.source,
+                in_range: change.in_range,
+                actor: change.actor,
             })
             .await;
         self.surface_log_failure(failed);
     }
+}
+
+/// A name given with `identify`, with the giving browser's key.
+#[derive(Debug)]
+struct ViewerName {
+    name: String,
+    key: Option<String>,
+}
+
+/// One table transition for the statistics log.
+struct Transition {
+    table: u16,
+    prev: Option<Color>,
+    next: Color,
+    source: ChangeSource,
+    in_range: bool,
+    /// Who made it, in a session that collects viewer names.
+    actor: Option<String>,
 }
 
 fn error(code: &str, message: &str) -> SessionServerMsg {
@@ -436,7 +490,10 @@ fn creator_mutating(message: &SessionClientMsg) -> bool {
 fn creator_only(message: &SessionClientMsg) -> bool {
     !matches!(
         message,
-        SessionClientMsg::Auth { .. } | SessionClientMsg::SetTable { .. } | SessionClientMsg::Ping
+        SessionClientMsg::Auth { .. }
+            | SessionClientMsg::Identify { .. }
+            | SessionClientMsg::SetTable { .. }
+            | SessionClientMsg::Ping
     )
 }
 
@@ -501,6 +558,7 @@ pub(crate) async fn leave(state: &AppState, cell: &Arc<SessionCell>, client: &Cl
     }
     let now = now_ms();
     session.pending.remove(&client.id());
+    session.viewer_names.remove(&client.id());
     if session.viewers.remove(&client.id()).is_some() {
         session.viewers_changed(state, now).await;
     } else if session.is_creator(client.id()) {
@@ -538,6 +596,7 @@ pub(crate) async fn handle(
         SessionClientMsg::Auth { creator_token } => {
             auth(state, cell, &mut session, me, &creator_token, now).await;
         }
+        SessionClientMsg::Identify { name, key } => identify(&mut session, me, &name, key),
         SessionClientMsg::SetTable { table, color } => {
             set_table(state, &mut session, me, table, color, now).await;
         }
@@ -612,6 +671,8 @@ async fn auth(
     }
     if !session.is_creator(me.id()) {
         session.pending.remove(&me.id());
+        // From now on this connection is logged as the host.
+        session.viewer_names.remove(&me.id());
         let was_viewer = session.viewers.remove(&me.id()).is_some();
         if let Some(previous) = session.creator.replace(me.clone()) {
             // A refreshed tab or second device took over. The old socket is
@@ -635,10 +696,67 @@ async fn auth(
     });
 }
 
+/// A viewer gives its name, in a session that collects names. No two
+/// connections hold the same name (ignoring letter case) at once, except
+/// that a connection presenting the holder's own browser key takes the name
+/// over from that stale connection. A rejected name changes nothing (an
+/// earlier valid name stays). The creator needs no name: it is always
+/// logged as the host.
+fn identify(session: &mut Session, me: &Client, name: &str, key: Option<String>) {
+    if !session.collect_names {
+        me.send(&error(
+            "names_not_collected",
+            "This session does not collect viewer names.",
+        ));
+        return;
+    }
+    if session.is_creator(me.id()) {
+        return;
+    }
+    let Ok(name) = normalize_viewer_name(name) else {
+        me.send(&error(
+            "invalid_viewer_name",
+            "Name must be 1 to 40 characters without control characters, and not \"host\".",
+        ));
+        return;
+    };
+    let key = key.filter(|key| valid_viewer_key(key));
+    let wanted = name.to_lowercase();
+    let holder = session
+        .viewer_names
+        .iter()
+        .find(|(id, held)| **id != me.id() && held.name.to_lowercase() == wanted)
+        .map(|(id, held)| (*id, held.key.clone()));
+    if let Some((holder, held_key)) = holder {
+        if key.is_none() || held_key != key {
+            me.send(&error(
+                "name_taken",
+                "Someone in this session already uses that name. Choose another one.",
+            ));
+            return;
+        }
+        // The same browser reconnected before its old connection dropped.
+        session.viewer_names.remove(&holder);
+    }
+    session
+        .viewer_names
+        .insert(me.id(), ViewerName { name, key });
+}
+
+/// Whether a viewer key is short ASCII letters, digits, and hyphens; any
+/// other key is ignored, which only disables the reconnect takeover.
+fn valid_viewer_key(key: &str) -> bool {
+    (1..=MAX_VIEWER_KEY_BYTES).contains(&key.len())
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
 /// Any viewer may set an in-range table, but only while the receiver is
 /// connected: the command is relayed to the creator's serial bridge first,
 /// and state changes only then. Offline, nothing changes and nothing is
-/// logged (fixing the baseline's state-before-serial bug).
+/// logged (fixing the baseline's state-before-serial bug). In a session
+/// that collects viewer names, a viewer must have identified first.
 async fn set_table(
     state: &AppState,
     session: &mut Session,
@@ -647,6 +765,14 @@ async fn set_table(
     color: Color,
     now: i64,
 ) {
+    let actor = session.actor(me.id());
+    if session.collect_names && actor.is_none() {
+        me.send(&error(
+            "name_required",
+            "Enter your name before changing tables.",
+        ));
+        return;
+    }
     if !session.board.range().contains(table) {
         me.send(&error(
             "table_out_of_range",
@@ -665,11 +791,14 @@ async fn set_table(
         session
             .log_state_change(
                 now,
-                table,
-                Some(prev),
-                color,
-                ChangeSource::TeacherClick,
-                true,
+                Transition {
+                    table,
+                    prev: Some(prev),
+                    next: color,
+                    source: ChangeSource::TeacherClick,
+                    in_range: true,
+                    actor,
+                },
             )
             .await;
         session.broadcast(&session.table_update(table));
@@ -697,11 +826,14 @@ async fn station_report(
             session
                 .log_state_change(
                     now,
-                    table,
-                    Some(prev),
-                    color,
-                    ChangeSource::StudentRadio,
-                    true,
+                    Transition {
+                        table,
+                        prev: Some(prev),
+                        next: color,
+                        source: ChangeSource::StudentRadio,
+                        in_range: true,
+                        actor: None,
+                    },
                 )
                 .await;
             session.broadcast(&session.table_update(table));
@@ -711,7 +843,17 @@ async fn station_report(
     }
     if let Some(prev) = session.board.record_unlisted(table, color, now) {
         session
-            .log_state_change(now, table, prev, color, ChangeSource::StudentRadio, false)
+            .log_state_change(
+                now,
+                Transition {
+                    table,
+                    prev,
+                    next: color,
+                    source: ChangeSource::StudentRadio,
+                    in_range: false,
+                    actor: None,
+                },
+            )
             .await;
     }
     session.send_to_creator(&SessionServerMsg::UnlistedTables {
@@ -774,14 +916,18 @@ async fn reset_all(state: &AppState, session: &mut Session, me: &Client, now: i6
         command: SerialCommand::ResetAll,
     });
     for (table, prev) in session.board.reset_to_green() {
+        let actor = session.host_actor();
         session
             .log_state_change(
                 now,
-                table,
-                Some(prev),
-                Color::Green,
-                ChangeSource::TeacherResetAll,
-                true,
+                Transition {
+                    table,
+                    prev: Some(prev),
+                    next: Color::Green,
+                    source: ChangeSource::TeacherResetAll,
+                    in_range: true,
+                    actor,
+                },
             )
             .await;
     }
@@ -817,14 +963,18 @@ async fn set_table_range(
     let prev_range = session.board.range();
     let (reset, pruned) = session.board.change_range(next_range);
     for (table, prev) in reset {
+        let actor = session.host_actor();
         session
             .log_state_change(
                 now,
-                table,
-                Some(prev),
-                Color::Green,
-                ChangeSource::RangeReset,
-                true,
+                Transition {
+                    table,
+                    prev: Some(prev),
+                    next: Color::Green,
+                    source: ChangeSource::RangeReset,
+                    in_range: true,
+                    actor,
+                },
             )
             .await;
     }
@@ -856,15 +1006,29 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::{
-        bound_firmware, creator_mutating, creator_only, sanitize_text, truncate_chars, TokenBucket,
-        MAX_FIRMWARE_VERSION_CHARS,
+        bound_firmware, creator_mutating, creator_only, sanitize_text, truncate_chars,
+        valid_viewer_key, TokenBucket, MAX_FIRMWARE_VERSION_CHARS,
     };
 
     #[test]
-    fn only_auth_set_table_and_ping_are_open_to_viewers() {
+    fn viewer_keys_are_short_hyphenated_alphanumerics() {
+        assert!(valid_viewer_key("0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60"));
+        assert!(valid_viewer_key(&"k".repeat(64)));
+        for key in ["", "has space", "a.b", "\u{e9}", "k\n"] {
+            assert!(!valid_viewer_key(key), "{key:?}");
+        }
+        assert!(!valid_viewer_key(&"k".repeat(65)));
+    }
+
+    #[test]
+    fn only_auth_identify_set_table_and_ping_are_open_to_viewers() {
         let open = [
             SessionClientMsg::Auth {
                 creator_token: String::new(),
+            },
+            SessionClientMsg::Identify {
+                name: "Alice".to_string(),
+                key: None,
             },
             SessionClientMsg::SetTable {
                 table: 1,

@@ -15,6 +15,12 @@
 //! [`JsonlEvent::StateChange`] keeps `prev: null` for a first-heard
 //! out-of-range table (an omitted key would be a different schema),
 //! while an absent `firmware` object is omitted.
+//!
+//! The keys for sessions that collect viewer names (`collect_names` on
+//! `session_start`, `actor` on `state_change`) are optional additions to
+//! schema version 1. They are written last and only when they carry
+//! information, so a session without names writes exactly the original
+//! lines, and readers that ignore unknown keys keep working.
 
 use serde::{Deserialize, Serialize};
 
@@ -69,6 +75,10 @@ pub enum JsonlEvent {
         name: String,
         /// The initial inclusive table range.
         range: TableRange,
+        /// Whether the session collects viewer names, so its web-app
+        /// changes carry an `actor`. Written only when `true`.
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        collect_names: bool,
     },
     /// The creator's serial bridge connected or disconnected, so plots
     /// can shade the intervals where radio reports could not arrive.
@@ -105,6 +115,12 @@ pub enum JsonlEvent {
         source: ChangeSource,
         /// Whether the table was inside the active session range.
         in_range: bool,
+        /// Who made a web-app change in a session that collects viewer
+        /// names: the name the viewer gave, or
+        /// [`HOST_ACTOR`](crate::ws::HOST_ACTOR) for the creator. Omitted
+        /// for station reports and in sessions that collect no names.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor: Option<String>,
     },
     /// The creator changed the displayed table range; explains jumps in
     /// the denominator of average-state plots.
@@ -174,11 +190,51 @@ mod tests {
             session_id: "0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60".to_string(),
             name: "Studio 3B \u{2014} Week 4".to_string(),
             range: TableRange::default_classroom(),
+            collect_names: false,
         };
         assert_eq!(
             line(&event),
             "{\"event\":\"session_start\",\"schema_version\":1,\"ts_ms\":1764086400000,\"elapsed_ms\":0,\"session_id\":\"0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60\",\"name\":\"Studio 3B \u{2014} Week 4\",\"range\":{\"start\":1,\"end\":60}}"
         );
+    }
+
+    #[test]
+    fn name_collecting_sessions_match_the_documented_examples() {
+        let start = JsonlEvent::SessionStart {
+            schema_version: STATS_SCHEMA_VERSION,
+            ts_ms: 1_764_086_400_000,
+            elapsed_ms: 0,
+            session_id: "0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60".to_string(),
+            name: "Studio 3B \u{2014} Week 4".to_string(),
+            range: TableRange::default_classroom(),
+            collect_names: true,
+        };
+        assert_eq!(
+            line(&start),
+            "{\"event\":\"session_start\",\"schema_version\":1,\"ts_ms\":1764086400000,\"elapsed_ms\":0,\"session_id\":\"0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60\",\"name\":\"Studio 3B \u{2014} Week 4\",\"range\":{\"start\":1,\"end\":60},\"collect_names\":true}"
+        );
+        let click = JsonlEvent::StateChange {
+            ts_ms: 1_764_086_430_000,
+            elapsed_ms: 30_000,
+            table: 12,
+            prev: Some(Color::Red),
+            next: Color::Green,
+            source: ChangeSource::TeacherClick,
+            in_range: true,
+            actor: Some("Alice".to_string()),
+        };
+        assert_eq!(
+            line(&click),
+            "{\"event\":\"state_change\",\"ts_ms\":1764086430000,\"elapsed_ms\":30000,\"table\":12,\"prev\":\"red\",\"next\":\"green\",\"source\":\"teacher_click\",\"in_range\":true,\"actor\":\"Alice\"}"
+        );
+        for event in [&start, &click] {
+            assert_eq!(
+                serde_json::from_str::<JsonlEvent>(&line(event))
+                    .ok()
+                    .as_ref(),
+                Some(event)
+            );
+        }
     }
 
     #[test]
@@ -222,6 +278,7 @@ mod tests {
             next: Color::Red,
             source: ChangeSource::StudentRadio,
             in_range: true,
+            actor: None,
         };
         assert_eq!(
             line(&event),
@@ -236,6 +293,7 @@ mod tests {
             next: Color::Orange,
             source: ChangeSource::StudentRadio,
             in_range: false,
+            actor: None,
         };
         assert_eq!(
             line(&first_heard),
@@ -306,6 +364,7 @@ mod tests {
                 session_id: "id".to_string(),
                 name: "n".to_string(),
                 range: TableRange::default_classroom(),
+                collect_names: false,
             },
             JsonlEvent::StateChange {
                 ts_ms: 2,
@@ -315,6 +374,7 @@ mod tests {
                 next: Color::Red,
                 source: ChangeSource::TeacherClick,
                 in_range: true,
+                actor: None,
             },
             JsonlEvent::SessionEnd {
                 ts_ms: 3,

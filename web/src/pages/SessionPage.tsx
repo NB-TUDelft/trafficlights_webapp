@@ -10,7 +10,13 @@ import type { Color, SessionClientMsg } from "@/protocol/types";
 import { isWebSerialSupported } from "@/serial/loader";
 import { useBeeps, useSessionHandlers, useSessionSocket } from "./sessionHooks";
 import { resolveBeepsEnabled, resolveTapMode } from "./sessionModeHandlers";
-import { usePendingPort, useSerialBridge, useSessionUiState } from "./sessionStateHooks";
+import {
+  isNameError,
+  usePendingPort,
+  useSerialBridge,
+  useSessionUiState,
+  useViewerName,
+} from "./sessionStateHooks";
 
 const TICK_MS = 1000;
 
@@ -45,6 +51,7 @@ function useNowTick(): number {
 type UiState = ReturnType<typeof useSessionUiState>;
 type SerialBridgeState = ReturnType<typeof useSerialBridge>;
 type Handlers = ReturnType<typeof useSessionHandlers>;
+type ViewerNameState = ReturnType<typeof useViewerName>;
 
 interface ViewPropsArgs {
   state: SessionState;
@@ -53,13 +60,29 @@ interface ViewPropsArgs {
   ui: UiState;
   serialBridge: SerialBridgeState;
   handlers: Handlers;
+  viewer: ViewerNameState;
 }
 
 function undismissedError(state: SessionState, dismissed: string | null): string | null {
-  if (state.error === null) {
+  // Name problems are shown in the name prompt instead.
+  if (state.error === null || isNameError(state.error.code)) {
     return null;
   }
   return `${state.error.code}:${state.error.message}` === dismissed ? null : state.error.message;
+}
+
+function viewerNameProps(viewer: ViewerNameState) {
+  return {
+    viewerName: viewer.name,
+    namePromptOpen: viewer.promptOpen,
+    nameDraft: viewer.draft,
+    nameError: viewer.formError,
+    nameCanCancel: viewer.canCancel,
+    onNameDraftChange: viewer.setDraft,
+    onSubmitName: viewer.submit,
+    onChangeName: viewer.change,
+    onCancelName: viewer.cancel,
+  };
 }
 
 function buildViewProps(args: ViewPropsArgs): SessionViewProps {
@@ -100,6 +123,7 @@ function buildViewProps(args: ViewPropsArgs): SessionViewProps {
     onShowAllChange: ui.setShowAllPorts,
     onAskEnd: () => ui.setConfirmEnd(true),
     onCancelEnd: () => ui.setConfirmEnd(false),
+    ...viewerNameProps(args.viewer),
     ...handlers,
   };
 }
@@ -114,6 +138,7 @@ function SessionConsole({ sessionId }: { sessionId: string }) {
   const prevColorsRef = useRef<Map<number, Color>>(new Map());
   const send = useCallback((msg: SessionClientMsg) => socketRef.current?.send(msg) ?? false, []);
   const serialBridge = useSerialBridge(send, ui.setTransientError);
+  const viewer = useViewerName(sessionId, state, send);
   const beepsEnabled = resolveBeepsEnabled(state, ui);
   useSessionSocket({
     sessionId,
@@ -151,6 +176,8 @@ function SessionConsole({ sessionId }: { sessionId: string }) {
     setConfirmEnd: ui.setConfirmEnd,
   });
   return (
-    <SessionView {...buildViewProps({ state, socketStatus, nowMs, ui, serialBridge, handlers })} />
+    <SessionView
+      {...buildViewProps({ state, socketStatus, nowMs, ui, serialBridge, handlers, viewer })}
+    />
   );
 }

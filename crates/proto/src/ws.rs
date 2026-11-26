@@ -54,6 +54,46 @@ pub fn normalize_session_name(raw: &str) -> Result<String, ProtoError> {
     Ok(trimmed.to_string())
 }
 
+/// Maximum viewer name length, in Unicode scalar values.
+pub const MAX_VIEWER_NAME_CHARS: usize = 40;
+
+/// The name the statistics log gives the session creator in a session
+/// that collects viewer names. Reserved: no viewer may take it.
+pub const HOST_ACTOR: &str = "host";
+
+/// Normalize the name a viewer gives in a session that collects viewer
+/// names.
+///
+/// Trimmed like [`normalize_session_name`], and rejected with
+/// [`ProtoError::InvalidViewerName`] when it is empty after trimming,
+/// longer than 40 Unicode scalar values, contains an ASCII control
+/// character, or is the creator's reserved name [`HOST_ACTOR`] in any
+/// ASCII letter case, so no viewer can pass for the host in the log.
+pub fn normalize_viewer_name(raw: &str) -> Result<String, ProtoError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(ProtoError::InvalidViewerName {
+            reason: "name must not be empty",
+        });
+    }
+    if trimmed.chars().count() > MAX_VIEWER_NAME_CHARS {
+        return Err(ProtoError::InvalidViewerName {
+            reason: "name must be at most 40 characters",
+        });
+    }
+    if trimmed.chars().any(|ch| ch.is_ascii_control()) {
+        return Err(ProtoError::InvalidViewerName {
+            reason: "name must not contain control characters",
+        });
+    }
+    if trimmed.eq_ignore_ascii_case(HOST_ACTOR) {
+        return Err(ProtoError::InvalidViewerName {
+            reason: "the name \"host\" is reserved for the session creator",
+        });
+    }
+    Ok(trimmed.to_string())
+}
+
 /// What a normal tap or click on a table tile does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -164,6 +204,13 @@ pub enum LobbyClientMsg {
         /// Deployment PIN, when the server requires one.
         #[serde(default)]
         pin: Option<String>,
+        /// Whether viewers must give a name (see
+        /// [`SessionClientMsg::Identify`]) before they may change tables,
+        /// so the statistics log can name who made each change; the
+        /// creator is logged as [`HOST_ACTOR`]. Fixed for the session's
+        /// lifetime. Absent means `false`, and `false` is not written.
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        collect_names: bool,
     },
     /// Liveness check; answered with [`LobbyServerMsg::Pong`].
     Ping,
@@ -212,10 +259,10 @@ pub enum LobbyServerMsg {
 
 /// Messages a client sends on a session socket (`/ws/sessions/{id}`).
 ///
-/// `SetTable` and `Ping` are open to every viewer. All other stateful
-/// messages are creator-only: the server must verify that the sending
-/// connection authenticated with [`SessionClientMsg::Auth`] before
-/// acting on them.
+/// `Identify`, `SetTable`, and `Ping` are open to every viewer. All other
+/// stateful messages are creator-only: the server must verify that the
+/// sending connection authenticated with [`SessionClientMsg::Auth`]
+/// before acting on them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SessionClientMsg {
@@ -225,6 +272,25 @@ pub enum SessionClientMsg {
     Auth {
         /// The per-session creator capability token.
         creator_token: String,
+    },
+    /// A viewer gives its name, in a session that collects viewer names
+    /// (`collect_names`). Required there before the viewer's `SetTable`
+    /// is accepted, and sent again after every reconnect: the server keeps
+    /// the name for this connection only and never broadcasts it. The
+    /// server re-validates it with [`normalize_viewer_name`] and refuses a
+    /// name another connection of the session holds (ignoring letter
+    /// case). The creator never needs it; its changes are logged as
+    /// [`HOST_ACTOR`].
+    Identify {
+        /// The viewer's chosen name (not yet normalized).
+        name: String,
+        /// A random key the browser keeps for itself (at most 64 ASCII
+        /// letters, digits, or hyphens). A connection presenting the same
+        /// key as the current holder of the name takes the name over, so
+        /// a browser that reconnects before the server noticed its old
+        /// connection drop is not refused its own name.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
     },
     /// A viewer or the creator clicked a table tile. The server checks
     /// the table is in range and the receiver is connected before
@@ -340,6 +406,10 @@ pub enum SessionServerMsg {
         /// Whether viewer clients are locked to the host's global beep setting.
         #[serde(default)]
         beeps_locked: bool,
+        /// Whether this session collects viewer names: a viewer must send
+        /// [`SessionClientMsg::Identify`] before its `SetTable` is accepted.
+        #[serde(default)]
+        collect_names: bool,
         /// Whether this connection authenticated as the creator.
         is_creator: bool,
         /// Out-of-range stations heard; creator-only debugging data.
@@ -446,8 +516,9 @@ pub enum SessionServerMsg {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_session_name, ColorCounts, LobbyClientMsg, LobbyServerMsg, ServerBuildInfo,
-        SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, TapMode, UnlistedTable,
+        normalize_session_name, normalize_viewer_name, ColorCounts, LobbyClientMsg, LobbyServerMsg,
+        ServerBuildInfo, SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, TapMode,
+        UnlistedTable, HOST_ACTOR,
     };
     use crate::error::ProtoError;
     use crate::stats::EndReason;
@@ -538,6 +609,55 @@ mod tests {
     }
 
     #[test]
+    fn viewer_names_trim_and_keep_classroom_text() {
+        assert_eq!(normalize_viewer_name("  Alice  "), Ok("Alice".to_string()));
+        assert_eq!(
+            normalize_viewer_name("Ms. N\u{fa}\u{f1}ez"),
+            Ok("Ms. N\u{fa}\u{f1}ez".to_string())
+        );
+        // Only the exact creator name is reserved, not names containing it.
+        assert_eq!(
+            normalize_viewer_name("Host Bob"),
+            Ok("Host Bob".to_string())
+        );
+        let at_limit = "x".repeat(40);
+        assert_eq!(normalize_viewer_name(&at_limit), Ok(at_limit));
+        // The limit counts Unicode scalar values, not bytes.
+        let emoji: String = "\u{1f6a6}".repeat(40);
+        assert_eq!(normalize_viewer_name(&emoji), Ok(emoji));
+    }
+
+    #[test]
+    fn viewer_names_reject_empty_overlong_control_text_and_the_host_name() {
+        let reason = |name: &str| match normalize_viewer_name(name) {
+            Err(ProtoError::InvalidViewerName { reason }) => reason,
+            other => panic!("{name:?} must be rejected, got {other:?}"),
+        };
+        for name in ["", "   ", "\t\n "] {
+            assert_eq!(reason(name), "name must not be empty", "{name:?}");
+        }
+        assert_eq!(
+            reason(&"x".repeat(41)),
+            "name must be at most 40 characters"
+        );
+        for name in ["two\nlines", "has\ttab", "bell\u{7}", "del\u{7f}"] {
+            assert_eq!(
+                reason(name),
+                "name must not contain control characters",
+                "{name:?}"
+            );
+        }
+        assert_eq!(HOST_ACTOR, "host");
+        for name in ["host", "HOST", "  Host ", "hOsT"] {
+            assert_eq!(
+                reason(name),
+                "the name \"host\" is reserved for the session creator",
+                "{name:?}"
+            );
+        }
+    }
+
+    #[test]
     fn lobby_messages_use_the_snake_case_type_tag() {
         assert_eq!(
             json(&LobbyClientMsg::CreateSession {
@@ -545,10 +665,12 @@ mod tests {
                 start: 1,
                 end: 60,
                 pin: None,
+                collect_names: false,
             }),
             "{\"type\":\"create_session\",\"name\":\"Studio 3B\",\"start\":1,\"end\":60,\"pin\":null}"
         );
-        // A missing pin is indistinguishable from an explicit null.
+        // A missing pin is indistinguishable from an explicit null, and a
+        // missing collect_names means the session collects no names.
         assert_eq!(
             serde_json::from_str::<LobbyClientMsg>(
                 "{\"type\":\"create_session\",\"name\":\"A\",\"start\":1,\"end\":2}"
@@ -559,7 +681,23 @@ mod tests {
                 start: 1,
                 end: 2,
                 pin: None,
+                collect_names: false,
             })
+        );
+        let collecting = LobbyClientMsg::CreateSession {
+            name: "A".to_string(),
+            start: 1,
+            end: 2,
+            pin: None,
+            collect_names: true,
+        };
+        assert_eq!(
+            json(&collecting),
+            "{\"type\":\"create_session\",\"name\":\"A\",\"start\":1,\"end\":2,\"pin\":null,\"collect_names\":true}"
+        );
+        assert_eq!(
+            serde_json::from_str::<LobbyClientMsg>(&json(&collecting)).ok(),
+            Some(collecting)
         );
         assert_eq!(json(&LobbyClientMsg::Ping), "{\"type\":\"ping\"}");
         assert_eq!(json(&LobbyServerMsg::Pong), "{\"type\":\"pong\"}");
@@ -608,6 +746,23 @@ mod tests {
                 creator_token: "tok".to_string()
             }),
             "{\"type\":\"auth\",\"creator_token\":\"tok\"}"
+        );
+        assert_eq!(
+            json(&SessionClientMsg::Identify {
+                name: "Alice".to_string(),
+                key: None,
+            }),
+            "{\"type\":\"identify\",\"name\":\"Alice\"}"
+        );
+        assert_eq!(
+            serde_json::from_str::<SessionClientMsg>(
+                "{\"type\":\"identify\",\"name\":\"Alice\",\"key\":\"k-1\"}"
+            )
+            .ok(),
+            Some(SessionClientMsg::Identify {
+                name: "Alice".to_string(),
+                key: Some("k-1".to_string()),
+            })
         );
         assert_eq!(
             json(&SessionClientMsg::SetTable {
@@ -726,6 +881,7 @@ mod tests {
             tap_mode_locked: false,
             beeps_enabled: false,
             beeps_locked: false,
+            collect_names: false,
             is_creator: false,
             unlisted_tables: Vec::new(),
             server_now_ms: 1_764_086_420_000,
@@ -737,12 +893,20 @@ mod tests {
         assert_eq!(text.matches("\"red_since_ms\"").count(), 1, "{text}");
         assert!(!text.contains("\"port_label\""), "{text}");
         assert!(!text.contains("\"unlisted_tables\""), "{text}");
+        assert!(text.contains("\"collect_names\":false"), "{text}");
         assert!(
             text.contains("\"firmware\":{\"kind\":\"legacy\"}"),
             "{text}"
         );
         assert_eq!(
             serde_json::from_str::<SessionServerMsg>(&text).ok(),
+            Some(snapshot.clone())
+        );
+        // A snapshot from before viewer names existed still parses.
+        let older = text.replace("\"collect_names\":false,", "");
+        assert_ne!(older, text);
+        assert_eq!(
+            serde_json::from_str::<SessionServerMsg>(&older).ok(),
             Some(snapshot)
         );
     }

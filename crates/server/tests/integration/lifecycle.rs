@@ -367,6 +367,7 @@ async fn sigterm_ends_active_sessions_with_shutdown() {
             start: 1,
             end: 10,
             pin: None,
+            collect_names: false,
         })
         .await;
     let session = created(&lobby.recv().await);

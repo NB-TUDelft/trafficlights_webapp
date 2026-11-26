@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Footer } from "@/components/Footer";
+import { ToggleSwitch } from "@/components/ToggleSwitch";
 import { ReconnectingSocket, websocketUrl } from "@/lib/socket";
 import { parseLobbyServerMsg } from "@/protocol/parse";
 import { initialLobbyState, lobbyReducer } from "@/protocol/reducers";
@@ -31,6 +32,7 @@ export interface NewSessionViewProps {
   startValue: string;
   endValue: string;
   pin: string;
+  collectNames: boolean;
   showAllPorts: boolean;
   serialSupported: boolean;
   hasPendingPort: boolean;
@@ -40,6 +42,7 @@ export interface NewSessionViewProps {
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
   onPinChange: (value: string) => void;
+  onCollectNamesChange: (value: boolean) => void;
   onShowAllChange: (value: boolean) => void;
   onSelectPort: () => void;
   onSubmit: () => void;
@@ -70,6 +73,12 @@ function SerialPicker(props: NewSessionViewProps) {
       {props.hasPendingPort ? <p className="muted-text">Receiver selected and ready.</p> : null}
     </div>
   );
+}
+
+function collectNamesHint(collectNames: boolean): string {
+  return collectNames
+    ? 'Viewers enter a name; the log shows who changed each table (you as "host")'
+    : "Viewers stay anonymous";
 }
 
 export function NewSessionView(props: NewSessionViewProps) {
@@ -153,6 +162,13 @@ export function NewSessionView(props: NewSessionViewProps) {
             />
           </label>
         ) : null}
+        <ToggleSwitch
+          id="collect-names"
+          label="Collect viewer names"
+          hint={collectNamesHint(props.collectNames)}
+          checked={props.collectNames}
+          onToggle={() => props.onCollectNamesChange(!props.collectNames)}
+        />
         <SerialPicker {...props} />
         <div className="form-actions">
           <button type="submit" disabled={props.submitting}>
@@ -193,6 +209,7 @@ interface SubmitArgs {
   startValue: string;
   endValue: string;
   pin: string;
+  collectNames: boolean;
   send: (msg: LobbyClientMsg) => boolean;
   setLocalError: (value: string | null) => void;
   setSubmitting: (value: boolean) => void;
@@ -216,6 +233,7 @@ function submitCreateSession(args: SubmitArgs): void {
     start,
     end,
     pin: args.pin.length > 0 ? args.pin : null,
+    collect_names: args.collectNames,
   };
   args.setLocalError(null);
   args.setSubmitting(true);
@@ -259,6 +277,7 @@ function useCreateSessionForm(): NewSessionViewProps {
   const [startValue, setStartValue] = useState(String(DEFAULT_RANGE_START));
   const [endValue, setEndValue] = useState(String(DEFAULT_RANGE_END));
   const [pin, setPin] = useState("");
+  const [collectNames, setCollectNames] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const picker = usePortPicker(setLocalError);
@@ -274,17 +293,19 @@ function useCreateSessionForm(): NewSessionViewProps {
       startValue,
       endValue,
       pin,
+      collectNames,
       send: (msg) => socketRef.current?.send(msg) ?? false,
       setLocalError,
       setSubmitting,
     });
-  }, [name, startValue, endValue, pin, socketRef]);
+  }, [name, startValue, endValue, pin, collectNames, socketRef]);
   return {
     serverInfo: state.serverInfo,
     name,
     startValue,
     endValue,
     pin,
+    collectNames,
     showAllPorts: picker.showAllPorts,
     serialSupported: isWebSerialSupported(),
     hasPendingPort: picker.hasPendingPort,
@@ -294,6 +315,7 @@ function useCreateSessionForm(): NewSessionViewProps {
     onStartChange: setStartValue,
     onEndChange: setEndValue,
     onPinChange: setPin,
+    onCollectNamesChange: setCollectNames,
     onShowAllChange: picker.setShowAllPorts,
     onSelectPort: picker.handleSelectPort,
     onSubmit: handleSubmit,

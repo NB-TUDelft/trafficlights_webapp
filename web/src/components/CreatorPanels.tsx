@@ -179,8 +179,11 @@ export interface AudioInfoProps {
   viewerCount: number;
   tapMode: TapMode;
   tapModeLocked: boolean;
+  /** The name this viewer gave, in a session that collects names. */
+  viewerName?: string | null;
   onToggleBeeps: () => void;
   onToggleTapMode: () => void;
+  onChangeName?: () => void;
 }
 
 export function AudioInfoCard(props: Readonly<AudioInfoProps>) {
@@ -209,11 +212,23 @@ export function AudioInfoCard(props: Readonly<AudioInfoProps>) {
       />
       <p className="muted-text">{props.viewerCount} viewers connected</p>
       <p className="muted-text">{tapInstructions}</p>
+      {props.viewerName === undefined || props.viewerName === null ? null : (
+        <p className="muted-text viewer-name-line">
+          <span>
+            Your name: <strong>{props.viewerName}</strong>
+          </span>
+          <button type="button" className="ghost-button" onClick={props.onChangeName}>
+            Change name
+          </button>
+        </p>
+      )}
     </article>
   );
 }
 
 export interface SessionManagementProps {
+  /** Whether the session collects viewer names. */
+  collectNames?: boolean;
   renameValue: string;
   confirmEnd: boolean;
   onRenameChange: (value: string) => void;
@@ -243,6 +258,12 @@ export function SessionManagementCard(props: Readonly<SessionManagementProps>) {
       <button type="button" onClick={props.onDownloadLog}>
         Download statistics (.jsonl)
       </button>
+      {props.collectNames === true ? (
+        <p className="muted-text">
+          Viewer names are collected: the statistics log names who changed each table, with you as
+          "host".
+        </p>
+      ) : null}
       {props.confirmEnd ? (
         <span className="inline-actions">
           <button type="button" className="danger-button" onClick={props.onConfirmEnd}>

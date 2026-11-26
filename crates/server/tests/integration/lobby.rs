@@ -17,6 +17,7 @@ fn create(name: &str, start: u16, end: u16, pin: Option<&str>) -> LobbyClientMsg
         start,
         end,
         pin: pin.map(str::to_string),
+        collect_names: false,
     }
 }
 

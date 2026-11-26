@@ -3,8 +3,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionState } from "@/protocol/reducers";
+import {
+  getLastViewerName,
+  getViewerKey,
+  getViewerName,
+  hasCreatorToken,
+  saveViewerName,
+} from "@/protocol/storage";
 import type { SessionClientMsg, TapMode } from "@/protocol/types";
-import { DEFAULT_BEEPS_ENABLED, DEFAULT_TAP_MODE } from "@/protocol/types";
+import {
+  DEFAULT_BEEPS_ENABLED,
+  DEFAULT_TAP_MODE,
+  HOST_ACTOR,
+  MAX_VIEWER_NAME_CHARS,
+  normalizeViewerName,
+} from "@/protocol/types";
 import { CreatorSerialBridge } from "@/serial/bridge";
 import { takePendingSerialPort } from "@/serial/pending";
 import type { SerialPortLike, SerialStatusUpdate } from "@/serial/types";
@@ -123,4 +136,77 @@ export function usePendingPort(
       connectToPort(port).catch(() => undefined);
     }
   }, [isCreator, sessionId, connectToPort]);
+}
+
+const NAME_ERROR_CODES: ReadonlySet<string> = new Set([
+  "invalid_viewer_name",
+  "name_required",
+  "name_taken",
+]);
+
+/** Whether a server error is about this viewer's name (shown in the name prompt). */
+export function isNameError(code: string): boolean {
+  return NAME_ERROR_CODES.has(code);
+}
+
+/**
+ * The viewer's name in a session that collects names: remembered per
+ * session, suggested from the last session, asked for in a prompt, and asked
+ * for again when the server refuses it (for example a name already in use).
+ */
+export function useViewerName(
+  sessionId: string,
+  state: SessionState,
+  send: (msg: SessionClientMsg) => boolean,
+) {
+  const [name, setName] = useState<string | null>(() => getViewerName(sessionId));
+  const [draft, setDraft] = useState(() => getViewerName(sessionId) ?? getLastViewerName() ?? "");
+  const [editing, setEditing] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [holdsCreatorToken] = useState(() => hasCreatorToken(sessionId));
+  useEffect(() => {
+    if (state.error !== null && isNameError(state.error.code)) {
+      setName(null);
+      setFormError(state.error.message);
+    }
+  }, [state.error]);
+  const submit = useCallback(() => {
+    const normalized = normalizeViewerName(draft);
+    if (normalized === null) {
+      setFormError(
+        `Enter a name of 1 to ${MAX_VIEWER_NAME_CHARS} characters other than "${HOST_ACTOR}".`,
+      );
+      return;
+    }
+    saveViewerName(sessionId, normalized);
+    setName(normalized);
+    setDraft(normalized);
+    setFormError(null);
+    setEditing(false);
+    send({ type: "identify", name: normalized, key: getViewerKey() });
+  }, [draft, sessionId, send]);
+  const change = useCallback(() => setEditing(true), []);
+  const cancel = useCallback(() => {
+    setEditing(false);
+    setFormError(null);
+    setDraft(name ?? "");
+  }, [name]);
+  const promptOpen =
+    state.hasSnapshot &&
+    state.collectNames &&
+    !state.isCreator &&
+    !holdsCreatorToken &&
+    state.ended === null &&
+    (name === null || editing);
+  return {
+    name,
+    draft,
+    setDraft,
+    formError,
+    promptOpen,
+    canCancel: name !== null,
+    submit,
+    change,
+    cancel,
+  };
 }

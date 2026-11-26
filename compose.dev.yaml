@@ -29,6 +29,8 @@ services:
       # Empty means session creation is open (a blank value counts as unset).
       CREATE_SESSION_PIN: ${CREATE_SESSION_PIN:-}
       MAX_CONNECTIONS: ${MAX_CONNECTIONS:-512}
+      # Optional custom script added to the page head (address only).
+      CUSTOM_SCRIPT_SRC: ${CUSTOM_SCRIPT_SRC:-}
       # No PUBLIC_ORIGIN: plain http here, so the WebSocket Origin check stays
       # off. Production sets it (see compose.prod.yaml).
     read_only: true

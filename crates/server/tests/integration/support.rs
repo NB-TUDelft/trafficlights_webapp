@@ -113,6 +113,17 @@ impl TestServer {
 
     /// Create a session `name` over `start..=end` through a fresh lobby.
     pub async fn create(&self, name: &str, start: u16, end: u16) -> Created {
+        self.create_with(name, start, end, false).await
+    }
+
+    /// Create a session that collects viewer names when `collect_names`.
+    pub async fn create_with(
+        &self,
+        name: &str,
+        start: u16,
+        end: u16,
+        collect_names: bool,
+    ) -> Created {
         let (mut lobby, _) = self.lobby().await;
         lobby
             .send(&LobbyClientMsg::CreateSession {
@@ -120,6 +131,7 @@ impl TestServer {
                 start,
                 end,
                 pin: None,
+                collect_names,
             })
             .await;
         created(&lobby.recv().await)

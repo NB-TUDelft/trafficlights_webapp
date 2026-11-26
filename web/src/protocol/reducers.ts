@@ -93,6 +93,8 @@ export interface SessionState {
   tapModeLocked: boolean;
   beepsEnabled: boolean;
   beepsLocked: boolean;
+  /** Whether viewers must give a name before changing tables. */
+  collectNames: boolean;
   isCreator: boolean;
   unlistedTables: UnlistedTable[];
   serverNowMs: number | null;
@@ -117,6 +119,7 @@ export const initialSessionState: SessionState = {
   tapModeLocked: false,
   beepsEnabled: DEFAULT_BEEPS_ENABLED,
   beepsLocked: false,
+  collectNames: false,
   isCreator: false,
   unlistedTables: [],
   serverNowMs: null,
@@ -147,6 +150,7 @@ function fromSnapshot(state: SessionState, msg: SnapshotMsg): SessionState {
     tapModeLocked: msg.tap_mode_locked ?? false,
     beepsEnabled: msg.beeps_enabled ?? DEFAULT_BEEPS_ENABLED,
     beepsLocked: msg.beeps_locked ?? false,
+    collectNames: msg.collect_names ?? false,
     isCreator: msg.is_creator,
     unlistedTables: msg.unlisted_tables ?? [],
     serverNowMs: msg.server_now_ms,

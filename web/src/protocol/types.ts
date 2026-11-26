@@ -15,6 +15,9 @@ export const MIN_TABLE_ID = 1;
 export const MAX_TABLE_ID = 9999;
 export const MAX_STATION_ID = 9999;
 export const MAX_SESSION_NAME_CHARS = 80;
+export const MAX_VIEWER_NAME_CHARS = 40;
+/** The statistics-log name of the creator in a session that collects names. */
+export const HOST_ACTOR = "host";
 export const DEFAULT_RANGE_START = 1;
 export const DEFAULT_RANGE_END = 60;
 export const EXPECTED_PROTO_VERSION = 1;
@@ -76,6 +79,18 @@ export function normalizeSessionName(raw: string): string | null {
     return null;
   }
   if (hasControlChar(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+/** Mirrors proto normalize_viewer_name; returns null when invalid. */
+export function normalizeViewerName(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || [...trimmed].length > MAX_VIEWER_NAME_CHARS) {
+    return null;
+  }
+  if (hasControlChar(trimmed) || trimmed.toLowerCase() === HOST_ACTOR) {
     return null;
   }
   return trimmed;
@@ -145,7 +160,14 @@ export type SerialEvent =
   | { type: "ignored_echo" };
 
 export type LobbyClientMsg =
-  | { type: "create_session"; name: string; start: number; end: number; pin?: string | null }
+  | {
+      type: "create_session";
+      name: string;
+      start: number;
+      end: number;
+      pin?: string | null;
+      collect_names?: boolean;
+    }
   | { type: "ping" };
 
 export type LobbyServerMsg =
@@ -157,6 +179,7 @@ export type LobbyServerMsg =
 
 export type SessionClientMsg =
   | { type: "auth"; creator_token: string }
+  | { type: "identify"; name: string; key?: string | null }
   | { type: "set_table"; table: number; color: Color }
   | { type: "station_report"; table: number; color: Color }
   | {
@@ -189,6 +212,7 @@ export type SessionServerMsg =
       tap_mode_locked?: boolean;
       beeps_enabled?: boolean;
       beeps_locked?: boolean;
+      collect_names?: boolean;
       is_creator: boolean;
       unlisted_tables?: UnlistedTable[];
       server_now_ms: number;

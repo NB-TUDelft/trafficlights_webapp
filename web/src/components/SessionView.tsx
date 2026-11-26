@@ -10,6 +10,7 @@ import {
 } from "@/components/CreatorPanels";
 import { Footer } from "@/components/Footer";
 import { LongestOnRed } from "@/components/LongestOnRed";
+import { NamePrompt } from "@/components/NamePrompt";
 import { SessionHeader, type SessionStatusKind } from "@/components/SessionHeader";
 import { TableGrid } from "@/components/TableGrid";
 import type { SocketStatus } from "@/lib/socket";
@@ -66,6 +67,16 @@ export interface SessionViewProps {
   rangeEnd: string;
   renameValue: string;
   confirmEnd: boolean;
+  /** The name this viewer gave, in a session that collects names. */
+  viewerName: string | null;
+  namePromptOpen: boolean;
+  nameDraft: string;
+  nameError: string | null;
+  nameCanCancel: boolean;
+  onNameDraftChange: (value: string) => void;
+  onSubmitName: () => void;
+  onChangeName: () => void;
+  onCancelName: () => void;
   onDismissError: () => void;
   onSetTable: (table: number, color: Color) => void;
   onToggleMute: (table: number) => void;
@@ -123,6 +134,7 @@ function CreatorControls(props: Readonly<SessionViewProps>) {
         onToggleTapModeLock={props.onToggleTapModeLock}
       />
       <SessionManagementCard
+        collectNames={props.state.collectNames}
         renameValue={props.renameValue}
         confirmEnd={props.confirmEnd}
         onRenameChange={props.onRenameChange}
@@ -165,10 +177,28 @@ function SessionBanners(props: Readonly<SessionViewProps>) {
 }
 
 export function SessionView(props: Readonly<SessionViewProps>) {
+  return (
+    <>
+      <SessionMain {...props} />
+      {props.namePromptOpen ? (
+        <NamePrompt
+          draft={props.nameDraft}
+          error={props.nameError}
+          canCancel={props.nameCanCancel}
+          onDraftChange={props.onNameDraftChange}
+          onSubmit={props.onSubmitName}
+          onCancel={props.onCancelName}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SessionMain(props: Readonly<SessionViewProps>) {
   const { state } = props;
   const longest = computeLongestOnRed(state.tables, props.nowMs, state.clockOffsetMs);
   return (
-    <main className="page">
+    <main className="page" inert={props.namePromptOpen}>
       <SessionHeader
         name={state.name}
         counts={state.counts}
@@ -194,8 +224,10 @@ export function SessionView(props: Readonly<SessionViewProps>) {
             viewerCount={state.viewerCount}
             tapMode={props.tapMode}
             tapModeLocked={props.tapModeLocked}
+            viewerName={state.collectNames ? props.viewerName : null}
             onToggleBeeps={props.onToggleBeeps}
             onToggleTapMode={props.onToggleTapMode}
+            onChangeName={props.onChangeName}
           />
         )}
         <LongestOnRed entries={longest} />

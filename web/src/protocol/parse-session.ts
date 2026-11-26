@@ -184,6 +184,10 @@ function buildSnapshot(rec: JsonRecord, parts: SnapshotParts): SessionServerMsg 
   if (firmware !== undefined) {
     msg.firmware = firmware;
   }
+  const collectNames = boolField(rec, "collect_names");
+  if (collectNames !== null) {
+    msg.collect_names = collectNames;
+  }
   applyModeFields(rec, msg);
   return msg;
 }

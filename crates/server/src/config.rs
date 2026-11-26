@@ -65,6 +65,9 @@ pub struct ServerConfig {
     /// `MAX_CONNECTIONS`: the cap on simultaneously open WebSocket
     /// connections (lobby and sessions together).
     pub max_connections: usize,
+    /// `CUSTOM_SCRIPT_SRC`: an optional custom script added to the page
+    /// head.
+    pub custom_script: Option<CustomScript>,
     /// How long a new session connection may take to send its `auth`
     /// message before it is counted as a viewer. The creator's browser
     /// authenticates right after connecting, so it never shows up as a
@@ -84,6 +87,7 @@ impl Default for ServerConfig {
             log_retention: Duration::from_secs(DEFAULT_LOG_RETENTION_SECONDS),
             max_sessions: DEFAULT_MAX_SESSIONS,
             max_connections: DEFAULT_MAX_CONNECTIONS,
+            custom_script: None,
             auth_window: DEFAULT_AUTH_WINDOW,
         }
     }
@@ -103,6 +107,7 @@ impl fmt::Debug for ServerConfig {
             .field("log_retention", &self.log_retention)
             .field("max_sessions", &self.max_sessions)
             .field("max_connections", &self.max_connections)
+            .field("custom_script", &self.custom_script)
             .field("auth_window", &self.auth_window)
             .finish()
     }
@@ -162,6 +167,9 @@ impl ServerConfig {
                 }
                 None => defaults.max_connections,
             },
+            custom_script: get("CUSTOM_SCRIPT_SRC")
+                .map(|value| CustomScript::parse(&value))
+                .transpose()?,
             auth_window: defaults.auth_window,
         })
     }
@@ -175,6 +183,80 @@ impl ServerConfig {
         }
         origin.is_some_and(|origin| self.public_origins.iter().any(|allowed| allowed == origin))
     }
+}
+
+/// `CUSTOM_SCRIPT_SRC`: the address of a custom script that every page
+/// loads from its head (`<script src="..." defer>`), and the origin the
+/// page's Content-Security-Policy allows for it, derived from the address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomScript {
+    src: String,
+    origin: String,
+}
+
+impl CustomScript {
+    /// Parse a `CUSTOM_SCRIPT_SRC` value: an absolute `https://` or
+    /// `http://` URL of printable ASCII without quotes, angle brackets,
+    /// backslashes, or backticks, whose host is a plain DNS name or IPv4
+    /// address with an optional port (no user info). Anything else is a
+    /// configuration error, never a page with a broken or unsafe tag.
+    pub fn parse(value: &str) -> Result<Self, ConfigError> {
+        let invalid = || ConfigError::Invalid {
+            name: "CUSTOM_SCRIPT_SRC",
+            expected: "an absolute http(s) URL such as https://scripts.example.com/script.js",
+            value: value.to_string(),
+        };
+        let src = value.trim();
+        let printable = src.bytes().all(|byte| {
+            byte.is_ascii_graphic() && !matches!(byte, b'"' | b'\'' | b'<' | b'>' | b'\\' | b'`')
+        });
+        if !printable {
+            return Err(invalid());
+        }
+        let lower = src.to_ascii_lowercase();
+        let scheme = ["https://", "http://"]
+            .into_iter()
+            .find(|scheme| lower.starts_with(scheme))
+            .ok_or_else(invalid)?;
+        let rest = &lower[scheme.len()..];
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        if !valid_authority(authority) {
+            return Err(invalid());
+        }
+        Ok(Self {
+            src: src.to_string(),
+            origin: format!("{scheme}{authority}"),
+        })
+    }
+
+    /// The script's URL, as configured.
+    pub fn src(&self) -> &str {
+        &self.src
+    }
+
+    /// The script's origin (`scheme://host[:port]`, lowercased), which the
+    /// page's Content-Security-Policy allows.
+    pub fn origin(&self) -> &str {
+        &self.origin
+    }
+}
+
+/// Whether `authority` is `host[:port]`: a host of letters, digits, `-`,
+/// and `.` not starting with `-` or `.`, and an optional 1 to 5 digit port.
+fn valid_authority(authority: &str) -> bool {
+    let (host, port) = match authority.split_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (authority, None),
+    };
+    let host_ok = !host.is_empty()
+        && !host.starts_with(['-', '.'])
+        && host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.'));
+    let port_ok = port.is_none_or(|port| {
+        (1..=5).contains(&port.len()) && port.bytes().all(|byte| byte.is_ascii_digit())
+    });
+    host_ok && port_ok
 }
 
 /// Whether a `BIND` value names a loopback host (`127.0.0.1`, `::1`, or
@@ -250,7 +332,7 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
-    use super::{is_loopback_bind, ConfigError, ServerConfig};
+    use super::{is_loopback_bind, ConfigError, CustomScript, ServerConfig};
 
     fn config(vars: &[(&str, &str)]) -> Result<ServerConfig, ConfigError> {
         let vars: HashMap<String, String> = vars
@@ -290,6 +372,10 @@ mod tests {
             ("LOG_RETENTION_SECONDS", "0"),
             ("MAX_SESSIONS", "2"),
             ("MAX_CONNECTIONS", "7"),
+            (
+                "CUSTOM_SCRIPT_SRC",
+                " https://Scripts.Example.com/s.js?site=A ",
+            ),
         ]);
         let Ok(config) = config else {
             panic!("valid configuration rejected: {config:?}");
@@ -308,6 +394,71 @@ mod tests {
         assert_eq!(config.log_retention, Duration::ZERO);
         assert_eq!(config.max_sessions, 2);
         assert_eq!(config.max_connections, 7);
+        let script = config.custom_script.expect("custom script");
+        assert_eq!(script.src(), "https://Scripts.Example.com/s.js?site=A");
+        assert_eq!(script.origin(), "https://scripts.example.com");
+    }
+
+    #[test]
+    fn custom_script_src_gives_its_origin_and_rejects_unsafe_values() {
+        for (src, origin) in [
+            (
+                "https://app.example.io/api/script.js?siteId=A1&x=2",
+                "https://app.example.io",
+            ),
+            ("http://127.0.0.1:8080/s.js", "http://127.0.0.1:8080"),
+            ("HTTPS://cdn.example.com", "https://cdn.example.com"),
+            ("https://cdn.example.com#frag", "https://cdn.example.com"),
+        ] {
+            let parsed = CustomScript::parse(src);
+            assert_eq!(
+                parsed.as_ref().map(CustomScript::origin),
+                Ok(origin),
+                "{src}"
+            );
+            assert_eq!(parsed.as_ref().map(CustomScript::src), Ok(src), "{src}");
+        }
+        // Blank means unset.
+        assert_eq!(
+            config(&[("CUSTOM_SCRIPT_SRC", "  ")]).map(|c| c.custom_script),
+            Ok(None)
+        );
+        for bad in [
+            "script.js",
+            "/script.js",
+            "//cdn.example.com/s.js",
+            "ftp://cdn.example.com/s.js",
+            "javascript:alert(1)",
+            "https://",
+            "https:///s.js",
+            "https://:8080/s.js",
+            "https://.example.com/s.js",
+            "https://user@cdn.example.com/s.js",
+            "https://cdn.example.com:/s.js",
+            "https://cdn.example.com:123456/s.js",
+            "https://cdn.example.com:80a/s.js",
+            "https://[::1]/s.js",
+            "https://cdn.example.com/a b.js",
+            "https://cdn.example.com/\"onload=\"x",
+            "https://cdn.example.com/'x",
+            "https://cdn.example.com/<x>",
+            "https://cdn.example.com/a\\b",
+            "https://cdn.example.com/`x`",
+            "https://cdn.example.com/\u{e9}.js",
+            "https://cdn.example.com/a\tb.js",
+            "https://cdn;example.com/s.js",
+        ] {
+            assert!(
+                matches!(
+                    config(&[("CUSTOM_SCRIPT_SRC", bad)]),
+                    Err(ConfigError::Invalid {
+                        name: "CUSTOM_SCRIPT_SRC",
+                        ..
+                    })
+                ),
+                "{bad:?} must be rejected"
+            );
+        }
     }
 
     #[test]

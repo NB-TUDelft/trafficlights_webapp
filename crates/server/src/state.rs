@@ -443,6 +443,7 @@ impl AppState {
 
     /// Validate and create a session for `requester`, replying with
     /// `session_created` to it alone and then updating the whole lobby.
+    /// `collect_names` makes viewers give a name before changing tables.
     pub(crate) async fn create_session(
         &self,
         requester: &Client,
@@ -450,6 +451,7 @@ impl AppState {
         start: u16,
         end: u16,
         pin: Option<&str>,
+        collect_names: bool,
     ) -> Result<(), CreateError> {
         // Check the PIN first, so callers without it get no validation
         // oracle for names or ranges.
@@ -472,12 +474,19 @@ impl AppState {
         let session_id = uuid::Uuid::now_v7().to_string();
         let creator_token = CreatorToken::generate();
         let now = now_ms();
-        let log = SessionLog::create(&self.shared.config.log_dir, &session_id, &name, range, now)
-            .await
-            .map_err(|error| {
-                tracing::error!(%error, "cannot create the session log");
-                CreateError::Internal
-            })?;
+        let log = SessionLog::create(
+            &self.shared.config.log_dir,
+            &session_id,
+            &name,
+            range,
+            collect_names,
+            now,
+        )
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "cannot create the session log");
+            CreateError::Internal
+        })?;
         let cell = Arc::new(SessionCell {
             id: session_id.clone(),
             token: creator_token.clone(),
@@ -486,6 +495,7 @@ impl AppState {
                 session_id.clone(),
                 name,
                 range,
+                collect_names,
                 now,
                 log,
             )),

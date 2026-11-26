@@ -62,15 +62,26 @@ pub fn log_path(dir: &Path, session_id: &str) -> PathBuf {
 
 impl SessionLog {
     /// Create `LOG_DIR` if needed, create the session's file (refusing to
-    /// reuse an existing one), and write the `session_start` header line.
+    /// reuse an existing one), and write the `session_start` header line,
+    /// which records whether the session collects viewer names.
     pub async fn create(
         dir: &Path,
         session_id: &str,
         name: &str,
         range: TableRange,
+        collect_names: bool,
         now_ms: i64,
     ) -> io::Result<Self> {
-        Self::create_with_cap(dir, session_id, name, range, now_ms, MAX_LOG_BYTES).await
+        Self::create_with_cap(
+            dir,
+            session_id,
+            name,
+            range,
+            collect_names,
+            now_ms,
+            MAX_LOG_BYTES,
+        )
+        .await
     }
 
     pub(crate) async fn create_with_cap(
@@ -78,6 +89,7 @@ impl SessionLog {
         session_id: &str,
         name: &str,
         range: TableRange,
+        collect_names: bool,
         now_ms: i64,
         max_bytes: u64,
     ) -> io::Result<Self> {
@@ -108,6 +120,7 @@ impl SessionLog {
             session_id: session_id.to_string(),
             name: name.to_string(),
             range,
+            collect_names,
         })
         .await?;
         Ok(log)
@@ -181,7 +194,7 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("trafficlights-log-unit-{}", uuid::Uuid::now_v7()));
         let range = TableRange::default_classroom();
-        let created = SessionLog::create(&dir, "abc", "Room 1", range, 5_000).await;
+        let created = SessionLog::create(&dir, "abc", "Room 1", range, false, 5_000).await;
         let Ok(mut log) = created else {
             panic!("cannot create the log: {created:?}");
         };
@@ -219,6 +232,7 @@ mod tests {
                     session_id: "abc".to_string(),
                     name: "Room 1".to_string(),
                     range,
+                    collect_names: false,
                 },
                 JsonlEvent::SessionEnd {
                     ts_ms: 7_500,
@@ -230,9 +244,11 @@ mod tests {
         assert!(text.ends_with('\n'));
 
         // An existing file is never reused or truncated.
-        assert!(SessionLog::create(&dir, "abc", "Again", range, 6_000)
-            .await
-            .is_err());
+        assert!(
+            SessionLog::create(&dir, "abc", "Again", range, false, 6_000)
+                .await
+                .is_err()
+        );
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 
@@ -241,7 +257,8 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("trafficlights-log-cap-{}", uuid::Uuid::now_v7()));
         let range = TableRange::default_classroom();
-        let created = SessionLog::create_with_cap(&dir, "cap", "Room 1", range, 5_000, 300).await;
+        let created =
+            SessionLog::create_with_cap(&dir, "cap", "Room 1", range, false, 5_000, 300).await;
         let Ok(mut log) = created else {
             panic!("cannot create the log: {created:?}");
         };
@@ -283,7 +300,7 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("trafficlights-log-perm-{}", uuid::Uuid::now_v7()));
         let range = TableRange::default_classroom();
-        let created = SessionLog::create(&dir, "perm", "Room 1", range, 5_000).await;
+        let created = SessionLog::create(&dir, "perm", "Room 1", range, false, 5_000).await;
         let Ok(mut log) = created else {
             panic!("cannot create the log: {created:?}");
         };

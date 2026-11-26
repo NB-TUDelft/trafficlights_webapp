@@ -2,8 +2,9 @@
 summary: >-
   Classroom statistics append-only JSONL schema (schema_version 1) streamed
   directly to ephemeral SSD (`LOG_DIR`, default `/tmp/trafficlights-logs`):
-  file lifecycle, event specifications, server invariants, Python plotting
-  recipes (pandas + matplotlib), and future SQLite/Turso archival mapping.
+  file lifecycle, event specifications (including optional `collect_names` and
+  `actor` attribution), server invariants, Python plotting recipes (pandas +
+  matplotlib), and future SQLite/Turso archival mapping.
 ---
 
 # Classroom statistics JSONL schema
@@ -43,6 +44,11 @@ Every line is a self-contained JSON object with:
   (`0` on `session_start`, non-decreasing thereafter).
 
 All event types are defined in `crates/proto` and serialized by `crates/server`.
+The viewer-name keys (`collect_names` on `session_start` and `actor` on
+`state_change`) are backward-compatible optional additions to
+`schema_version: 1`: they are written last and omitted when unused so sessions
+without viewer names produce byte-identical output and existing readers that
+ignore unknown keys continue to work.
 
 ### `session_start`
 
@@ -50,10 +56,19 @@ All event types are defined in `crates/proto` and serialized by `crates/server`.
 {"event":"session_start","schema_version":1,"ts_ms":1764086400000,"elapsed_ms":0,"session_id":"0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60","name":"Studio 3B — Week 4","range":{"start":1,"end":60}}
 ```
 
+When the session collects viewer names:
+
+```json
+{"event":"session_start","schema_version":1,"ts_ms":1764086400000,"elapsed_ms":0,"session_id":"0195f1a2-3b4c-7d8e-9f0a-1b2c3d4e5f60","name":"Studio 3B — Week 4","range":{"start":1,"end":60},"collect_names":true}
+```
+
 - `schema_version` (**integer**) — always `1` for this schema.
 - `session_id` (**string**) — session identifier (UUIDv7).
 - `name` (**string**) — human-readable session name.
 - `range` (**object**) — initial inclusive table range `{"start": int, "end": int}`.
+- `collect_names` (**boolean**, optional, omitted when `false`) — `true` when
+  viewers must identify before changing tables, so web-app `state_change`
+  records include `actor`. Fixed for the session's lifetime.
 
 ### `receiver_status`
 
@@ -72,6 +87,12 @@ All event types are defined in `crates/proto` and serialized by `crates/server`.
 {"event":"state_change","ts_ms":1764086415500,"elapsed_ms":15500,"table":12,"prev":"green","next":"red","source":"student_radio","in_range":true}
 ```
 
+For a web-app change in a session with `"collect_names": true`:
+
+```json
+{"event":"state_change","ts_ms":1764086430000,"elapsed_ms":30000,"table":12,"prev":"red","next":"green","source":"teacher_click","in_range":true,"actor":"Alice"}
+```
+
 - `table` (**integer**, `0`–`9999`) — station/table ID (`0` indicates an unset
   or misnumbered station).
 - `prev` (**string** or `null`) — previous color (`"green"`, `"orange"`,
@@ -86,6 +107,12 @@ All event types are defined in `crates/proto` and serialized by `crates/server`.
   - `"range_reset"` — emitted if a range change resets state.
 - `in_range` (**boolean**) — whether `table` fell inside the active
   `start..=end` range at `ts_ms`.
+- `actor` (**string**, optional, omitted when absent) — in sessions with
+  `"collect_names": true`, names who made a web-app change (`"teacher_click"`,
+  `"teacher_reset_all"`, or `"range_reset"`): either the viewer's normalized
+  name (1–40 Unicode scalar values, unique per session) or `"host"` for the
+  session creator. Always omitted for `"student_radio"` events and in sessions
+  where `collect_names` is `false`.
 
 ### `range_change`
 
@@ -133,6 +160,12 @@ All event types are defined in `crates/proto` and serialized by `crates/server`.
 6. **Atomic failure semantics:** failed commands while the receiver is
    disconnected never mutate table state and never emit synthetic
    `state_change` events.
+7. **Viewer-name attribution and privacy:** when `"collect_names": true`,
+   viewers cannot submit `set_table` until identified, viewer names are kept
+   per connection and never broadcast over WebSockets, `"host"` is reserved
+   case-insensitively for the session creator, and `actor` appears only on
+   web-app transitions (`teacher_click`, `teacher_reset_all`, `range_reset`),
+   never on `student_radio` or in non-collecting sessions.
 
 ## Python plotting recipes
 
@@ -281,6 +314,26 @@ plt.ylabel("Count")
 plt.legend()
 plt.tight_layout()
 plt.show()
+
+# ------------------------------------------------------------
+# 5. Web-app resolutions by actor (sessions with collect_names: true)
+# ------------------------------------------------------------
+if "actor" in in_range_states.columns:
+    by_actor = (
+        in_range_states[
+            (in_range_states["source"] == "teacher_click")
+            & (in_range_states["next"] == "green")
+        ]
+        .dropna(subset=["actor"])["actor"]
+        .value_counts()
+    )
+    if not by_actor.empty:
+        by_actor.plot(kind="bar", figsize=(8, 4))
+        plt.title("Table resolutions by actor")
+        plt.xlabel("Actor")
+        plt.ylabel("Resolved tables")
+        plt.tight_layout()
+        plt.show()
 ```
 
 ## Future archival to SQLite/Turso
@@ -297,6 +350,7 @@ CREATE TABLE classroom_stats (
     elapsed_ms BIGINT NOT NULL,
     event TEXT NOT NULL,
     name TEXT,
+    collect_names BOOLEAN,
     connected BOOLEAN,
     firmware_kind TEXT,
     firmware_mode TEXT,
@@ -306,6 +360,7 @@ CREATE TABLE classroom_stats (
     next_color TEXT,
     source TEXT,
     in_range BOOLEAN,
+    actor TEXT,
     range_start INTEGER,
     range_end INTEGER,
     viewers INTEGER,

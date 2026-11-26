@@ -164,13 +164,14 @@ async fn lobby_socket(state: Arc<AppState>, socket: WebSocket, _guard: Connectio
                     start,
                     end,
                     pin,
+                    collect_names,
                 }) => {
                     if !creates.allow(Instant::now()) {
                         client.send(&lobby_error("rate_limited", RATE_LIMITED_MESSAGE));
                         continue;
                     }
                     let created = state
-                        .create_session(&client, &name, start, end, pin.as_deref())
+                        .create_session(&client, &name, start, end, pin.as_deref(), collect_names)
                         .await;
                     if let Err(error) = created {
                         client.send(&LobbyServerMsg::Error {

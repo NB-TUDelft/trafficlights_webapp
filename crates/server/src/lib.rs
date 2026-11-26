@@ -8,7 +8,8 @@
 //!   download of a session's statistics `.jsonl` file;
 //! - `WS /ws/lobby` and `WS /ws/sessions/{id}` (see [`ws`]), backed by the
 //!   in-memory session registry in [`AppState`];
-//! - the single-page app embedded from `web/dist` for every other `GET`.
+//! - the single-page app embedded from `web/dist` for every other `GET`,
+//!   with the optional `CUSTOM_SCRIPT_SRC` script added to its head.
 //!
 //! [`build_router_with_state`] wires these to one [`AppState`];
 //! [`AppState::shutdown`] ends every session cleanly when the server stops.
@@ -36,7 +37,7 @@ mod session;
 mod state;
 pub mod ws;
 
-pub use config::{ConfigError, ServerConfig};
+pub use config::{ConfigError, CustomScript, ServerConfig};
 pub use state::AppState;
 
 /// Read-buffer size for streaming a statistics log download.
@@ -97,13 +98,83 @@ pub fn build_router() -> Router {
 /// `GET /api/sessions/{id}/log`, `WS /ws/lobby`, `WS /ws/sessions/{id}`,
 /// plus the embedded single-page app for every other `GET`.
 pub fn build_router_with_state(state: Arc<AppState>) -> Router {
+    let page = Arc::new(Page::new(state.config().custom_script.as_ref()));
     Router::new()
         .route("/api/health", get(health))
         .route("/api/sessions/{id}/log", get(session_log))
         .route("/ws/lobby", get(ws::lobby))
         .route("/ws/sessions/{id}", get(ws::session))
-        .fallback_service(get(static_fallback))
+        .fallback_service(get(move |uri: Uri| {
+            let page = Arc::clone(&page);
+            async move { static_fallback(&page, &uri) }
+        }))
         .with_state(state)
+}
+
+/// How the embedded single-page app is served: its
+/// Content-Security-Policy, and the custom `<script>` element added to the
+/// head of `index.html` when `CUSTOM_SCRIPT_SRC` is set. Built once at
+/// startup.
+#[derive(Debug)]
+struct Page {
+    csp: String,
+    head_script: Option<String>,
+}
+
+impl Page {
+    fn new(custom: Option<&CustomScript>) -> Self {
+        Self {
+            csp: content_security_policy(custom),
+            head_script: custom.map(script_element),
+        }
+    }
+}
+
+/// The Content-Security-Policy of the embedded app. A custom script's
+/// origin is allowed for scripts, connections, images, and styles.
+fn content_security_policy(custom: Option<&CustomScript>) -> String {
+    let extra = custom
+        .map(|script| format!(" {}", script.origin()))
+        .unwrap_or_default();
+    format!(
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'{extra}; connect-src 'self' ws: wss:{extra}; img-src 'self' data:{extra}; style-src 'self'{extra}; frame-ancestors 'none'; base-uri 'none'"
+    )
+}
+
+/// The deferred `<script>` element of a custom script.
+fn script_element(script: &CustomScript) -> String {
+    format!(
+        "<script src=\"{}\" defer></script>",
+        escape_attribute(script.src())
+    )
+}
+
+/// `text` escaped for a double-quoted HTML attribute value.
+fn escape_attribute(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
+/// `html` with `element` inserted right before its `</head>`, or `None`
+/// when the document is not UTF-8 or has no `</head>`.
+fn inject_into_head(html: &[u8], element: &str) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(html).ok()?;
+    let at = text.find("</head>")?;
+    let mut out = String::with_capacity(text.len() + element.len());
+    out.push_str(&text[..at]);
+    out.push_str(element);
+    out.push_str(&text[at..]);
+    Some(out.into_bytes())
 }
 
 async fn health() -> Json<serde_json::Value> {
@@ -196,7 +267,7 @@ async fn session_log(
 /// client-side route and gets `index.html`. Unknown `/api/...` and `/ws/...`
 /// paths and missing files are real 404s, so a stale asset never turns into
 /// HTML.
-async fn static_fallback(uri: Uri) -> Response {
+fn static_fallback(page: &Page, uri: &Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     let reserved = ["api", "ws"]
         .iter()
@@ -204,36 +275,38 @@ async fn static_fallback(uri: Uri) -> Response {
     if reserved {
         return api_error(StatusCode::NOT_FOUND, "not_found", "not found");
     }
-    if let Some(response) = embedded(path) {
+    if let Some(response) = embedded(page, path) {
         return response;
     }
     if !has_extension(path) {
-        if let Some(response) = embedded("index.html") {
+        if let Some(response) = embedded(page, "index.html") {
             return response;
         }
     }
     (StatusCode::NOT_FOUND, "not found").into_response()
 }
 
-fn embedded(path: &str) -> Option<Response> {
+fn embedded(page: &Page, path: &str) -> Option<Response> {
     let file = WebAssets::get(path)?;
+    let mut body = file.data.into_owned();
+    if path == "index.html" {
+        if let Some(element) = &page.head_script {
+            match inject_into_head(&body, element) {
+                Some(injected) => body = injected,
+                None => tracing::warn!("index.html has no </head>; custom script not added"),
+            }
+        }
+    }
     Some(
         (
             [
                 (header::CONTENT_TYPE, content_type(path)),
-                (
-                    header::X_CONTENT_TYPE_OPTIONS,
-                    "nosniff".to_string(),
-                ),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
                 (header::REFERRER_POLICY, "no-referrer".to_string()),
                 (header::X_FRAME_OPTIONS, "DENY".to_string()),
-                (
-                    header::CONTENT_SECURITY_POLICY,
-                    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; frame-ancestors 'none'; base-uri 'none'"
-                        .to_string(),
-                ),
+                (header::CONTENT_SECURITY_POLICY, page.csp.clone()),
             ],
-            file.data.into_owned(),
+            body,
         )
             .into_response(),
     )
@@ -295,8 +368,50 @@ mod tests {
     use axum::http::{header, HeaderMap, HeaderValue};
 
     use super::{
-        bearer_token, bind_port, content_type, format_version, has_extension, LICENSE, SOURCE_URL,
+        bearer_token, bind_port, content_security_policy, content_type, escape_attribute,
+        format_version, has_extension, inject_into_head, script_element, CustomScript, LICENSE,
+        SOURCE_URL,
     };
+
+    fn script(src: &str) -> CustomScript {
+        CustomScript::parse(src).expect("a valid custom script")
+    }
+
+    #[test]
+    fn the_csp_allows_a_custom_script_origin_only_when_configured() {
+        assert_eq!(
+            content_security_policy(None),
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+        );
+        let custom = script("https://Scripts.Example.com/s.js?site=1");
+        assert_eq!(
+            content_security_policy(Some(&custom)),
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://scripts.example.com; connect-src 'self' ws: wss: https://scripts.example.com; img-src 'self' data: https://scripts.example.com; style-src 'self' https://scripts.example.com; frame-ancestors 'none'; base-uri 'none'"
+        );
+    }
+
+    #[test]
+    fn the_custom_script_element_is_deferred_and_escaped() {
+        assert_eq!(
+            script_element(&script("https://cdn.example.com/s.js?a=1&b=2")),
+            "<script src=\"https://cdn.example.com/s.js?a=1&amp;b=2\" defer></script>"
+        );
+        assert_eq!(
+            escape_attribute("a&b\"c'd<e>f"),
+            "a&amp;b&quot;c&#39;d&lt;e&gt;f"
+        );
+    }
+
+    #[test]
+    fn scripts_are_injected_right_before_the_head_closes() {
+        let html = b"<html><head><title>x</title></head><body></body></html>";
+        assert_eq!(
+            inject_into_head(html, "<script></script>").as_deref(),
+            Some(&b"<html><head><title>x</title><script></script></head><body></body></html>"[..])
+        );
+        assert_eq!(inject_into_head(b"<html><body></body></html>", "<s>"), None);
+        assert_eq!(inject_into_head(&[0xff, 0xfe], "<s>"), None);
+    }
 
     fn authorization(value: &'static str) -> HeaderMap {
         let mut headers = HeaderMap::new();

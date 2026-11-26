@@ -1,14 +1,17 @@
 ---
 summary: >-
-  Locked-in architecture and design decisions (`2026-11-25` interview): Cargo
-  workspace (`crates/proto`, `crates/wasm`, `crates/server`) + React/Vite/Nub
-  frontend (`web/`), browser Rust/WASM Web Serial bridge with `!get` firmware
-  probe, WebSocket-first protocol (`/ws/lobby`, `/ws/sessions/{id}`), creator
-  capability token + optional `CREATE_SESSION_PIN`, 5-minute disconnect grace
-  period, out-of-range table notice, SSD-backed append-only JSONL statistics
-  format (avoiding RAM growth and Turso's ~13.6 MiB RSS overhead), funny
-  cartoon traffic-light SVG icon, and four-stage Coolify distroless Docker
-  pipeline.
+  Locked-in architecture and design decisions (`2026-11-25` interview, updated
+  as features land): Cargo workspace (`crates/proto`, `crates/wasm`,
+  `crates/server`) + React/Vite/Nub frontend (`web/`), browser Rust/WASM Web
+  Serial bridge with `!get` firmware probe, WebSocket-first protocol
+  (`/ws/lobby`, `/ws/sessions/{id}`), creator capability token + optional
+  `CREATE_SESSION_PIN`, optional per-session viewer name collection
+  (`collect_names`) with `.jsonl` `actor` attribution, optional
+  `CUSTOM_SCRIPT_SRC` head script injection + CSP origin extension, 5-minute
+  disconnect grace period, out-of-range table notice, SSD-backed append-only
+  JSONL statistics format (avoiding RAM growth and Turso's ~13.6 MiB RSS
+  overhead), funny cartoon traffic-light SVG icon, and four-stage Coolify
+  distroless Docker pipeline.
 always_read: true
 ---
 
@@ -96,27 +99,52 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
 - **WebSocket `Origin` validation:** when `PUBLIC_ORIGIN` is set (production),
   the server validates the HTTP `Origin` header on WebSocket upgrades to block
   cross-site WebSocket hijacking.
+- **Optional head script (`CUSTOM_SCRIPT_SRC`):** when `CUSTOM_SCRIPT_SRC` is
+  set to a validated absolute `http://` or `https://` URL (printable ASCII
+  without `"`, `'`, `<`, `>`, `\`, or `` ` ``; plain DNS host or IPv4 with an
+  optional 1–5 digit port and no user info; blank counts as unset; invalid
+  values stop startup), the server injects an HTML-escaped
+  `<script src="..." defer></script>` element immediately before `</head>` in
+  served `index.html` responses and appends the script's lowercased origin
+  (`scheme://host[:port]`) to `script-src`, `connect-src`, `img-src`, and
+  `style-src` in the `Content-Security-Policy` header.
 - **`WS /ws/lobby`:**
   - Server -> Client: `lobby_snapshot { sessions: [...] }` and incremental
     `lobby_update` events whenever a session is created, renamed, changes
     counts/receiver status, or ends.
-  - Client -> Server: `create_session { name, start, end, pin? }` -> replies
-    `session_created { session_id, creator_token }` (validates optional
-    `CREATE_SESSION_PIN` env var when configured).
+  - Client -> Server: `create_session { name, start, end, pin?, collect_names? }`
+    -> replies `session_created { session_id, creator_token }` (validates
+    optional `CREATE_SESSION_PIN` env var when configured; optional
+    `collect_names` defaults to `false` and is fixed for the session's
+    lifetime).
 - **`WS /ws/sessions/{id}`:**
   - Connects either as a **normal viewer** or as the **session creator** (by
     presenting `creator_token` in the initial `auth` message—never in the URL
     query string so tokens stay out of proxy logs and browser history).
-  - **Server -> All clients:** `snapshot`, `table_update`, `receiver_status`,
-    `session_meta` (name, range, viewer count, host tap mode and lock flag),
+  - **Server -> All clients:** `snapshot` (includes `collect_names`),
+    `table_update`, `receiver_status`, `session_meta` (name, range, viewer
+    count, host tap mode and lock flag, host beep mode and lock flag),
     `session_ended`, `error`.
   - **Server -> Creator only:** `serial_command` (`SetTable { table, color }`
     or `ResetAll`), `unlisted_tables` (station IDs heard outside `start..end`,
     such as unset `id=0`).
-  - **Normal client -> Server:** `set_table { table, color }` (validates table
-    is within `start..end` and receiver is connected; forwards `serial_command`
-    to creator's browser and updates state only if serial bridge is connected,
-    fixing the baseline 503 state-mutation bug!).
+  - **Normal client -> Server:**
+    - `identify { name, key? }`: required in `collect_names` sessions before
+      `set_table` is accepted. Normalized by `normalize_viewer_name` (trimmed,
+      1–40 Unicode scalar values, no ASCII control characters, and `"host"`
+      reserved case-insensitively for the session creator). Names are kept per
+      connection only, never broadcast, and must be unique within the session
+      (case-insensitive), except a reconnecting tab presenting the current
+      holder's matching random `key` (1–64 ASCII alphanumerics/hyphens) takes
+      the name over from its stale connection. Rejected with
+      `names_not_collected`, `invalid_viewer_name`, or `name_taken` without
+      clearing an earlier valid name; the creator never needs `identify` and is
+      always logged as `"host"`.
+    - `set_table { table, color }`: validates the viewer has identified when
+      `collect_names` is enabled (`name_required`), the table is within
+      `start..end`, and the receiver is connected; forwards `serial_command` to
+      the creator's browser and updates state only if the serial bridge is
+      connected (fixing the baseline 503 state-mutation bug).
   - **Creator -> Server (server-verified `creator_token`):**
     `station_report { table, color }` (from WASM serial parser),
     `serial_status { connected, port_label?, firmware? }`, `reset_all`,
@@ -132,7 +160,8 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
   count), and a visible **"Add session"** button.
 - **Add session (`/new`):** session name input, initial Table Range (`1`–`60`),
   optional PIN field (only shown when the server reports PIN-gated creation),
-  and micro:bit Web Serial picker button; creates the session, saves
+  optional **"Collect viewer names"** toggle switch (default off), and
+  micro:bit Web Serial picker button; creates the session, saves
   `creator_token` in browser storage, and opens the creator console.
 - **Session page (`/s/{id}`):**
   - Preserves the exact visual identity of `fastapi_receiver.py` (dark
@@ -151,16 +180,23 @@ WebSocket-first architecture; HTTP serves only embedded SPA assets,
     and grayed out when the host enables tap-mode lock), Longest On Red, and
     clickable table grid strictly within `start..end` (with smart per-table
     mute icons that all show off while global beeps are off and preserve manual
-    mutes when beeps are turned back on). No serial controls, no Table Range,
-    no Reset All To Green.
+    mutes when beeps are turned back on). In sessions with `collect_names`, a
+    modal name prompt (`NamePrompt`, marking `<main>` `inert`) asks the viewer
+    for a name before interacting—remembered per session in `localStorage`
+    (`trafficlights:viewerNames`), suggested from `trafficlights:lastViewerName`,
+    auto-resent on reconnect with a per-tab random key in `sessionStorage`
+    (`trafficlights:viewerKey`), displaying server name errors inline, and
+    showing `Your name` plus a **Change name** button in the info card. No
+    serial controls, no Table Range, no Reset All To Green.
   - **Creator view** (automatically enabled when browser holds matching
     `creator_token` for `{id}`): adds Serial Connection panel (connect,
     reconnect, firmware badge, wrong-mode station warning), Table Range card,
     `Reset All To Green`, Alert-beeps + Lock-beeps and Cycle-on-tap +
     Lock-tap-mode switches in Quick Actions, session rename, subtle **"Unlisted
     tables heard"** banner (e.g. catching unset ID `0` or misnumbered
-    stations), **Download statistics (.jsonl)** button, and **End session**
-    button.
+    stations), **Download statistics (.jsonl)** button (with a note when viewer
+    names are collected and the creator is logged as `"host"`), and **End
+    session** button.
 
 ## Session lifecycle and disconnect grace period
 
@@ -189,9 +225,9 @@ millisecond timestamp `ts_ms` and elapsed session milliseconds `elapsed_ms`:
 
 | `event` | Fields | Analytical use |
 | :--- | :--- | :--- |
-| `session_start` | `schema_version`, `session_id`, `name`, `ts_ms`, `range: {start, end}` | Session metadata header |
+| `session_start` | `schema_version`, `session_id`, `name`, `ts_ms`, `range: {start, end}`, `collect_names?` | Session metadata header (`collect_names: true` written only when enabled) |
 | `receiver_status` | `ts_ms`, `elapsed_ms`, `connected`, `firmware?: {kind, mode?, version?}` | Masks offline gaps in plots; tracks legacy vs. new firmware |
-| `state_change` | `ts_ms`, `elapsed_ms`, `table`, `prev`, `next`, `source`, `in_range` | Reconstructs exact active color counts over time, per-table timelines, average state, wait/resolution times, and student self-resolution vs. TA/teacher resolution (`source`: `student_radio`, `teacher_click`, `teacher_reset_all`, `range_reset`) |
+| `state_change` | `ts_ms`, `elapsed_ms`, `table`, `prev`, `next`, `source`, `in_range`, `actor?` | Reconstructs exact active color counts over time, per-table timelines, average state, wait/resolution times, student self-resolution vs. TA/teacher resolution (`source`: `student_radio`, `teacher_click`, `teacher_reset_all`, `range_reset`), and optional per-actor attribution (`actor`: viewer name or `"host"` for web-app changes in `collect_names` sessions) |
 | `range_change` | `ts_ms`, `elapsed_ms`, `prev_range`, `next_range` | Explains denominator changes in average-state plots |
 | `viewer_count` | `ts_ms`, `elapsed_ms`, `viewers` | Correlates TA/helper staffing with red-light wait times |
 | `session_end` | `ts_ms`, `elapsed_ms`, `reason` (`manual` \| `grace_timeout` \| `shutdown`) | Clean end marker for duration calculations |
@@ -232,8 +268,9 @@ module:
    database lock), `BIND=0.0.0.0:3000`, writable `/tmp` for ephemeral session
    `.jsonl` logs, and `HEALTHCHECK CMD ["/trafficlights-webapp", "--healthcheck"]`.
 
-Supported by `compose.dev.yaml`, `compose.prod.yaml`, and
-`.github/workflows/docker-publish.yml` (push to GHCR + Coolify webhook with
-`force=true`). Because there is no SQLite/Turso exclusive lock, Coolify does
-not require stop-then-start locking (though rolling restarts drop in-memory
-sessions, so deployments happen outside active classes).
+Supported by `compose.dev.yaml`, `compose.prod.yaml` (both passing through
+optional `CUSTOM_SCRIPT_SRC` for runtime head-script injection without
+rebuilding the image), and `.github/workflows/docker-publish.yml` (push to GHCR
++ Coolify webhook with `force=true`). Because there is no SQLite/Turso
+exclusive lock, Coolify does not require stop-then-start locking (though rolling
+restarts drop in-memory sessions, so deployments happen outside active classes).

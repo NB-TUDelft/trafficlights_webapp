@@ -37,15 +37,24 @@ pub use wire::{
     MAX_TABLE_ID, MICROBIT_USB_VID, MIN_TABLE_ID, SERIAL_BAUD_RATE,
 };
 pub use ws::{
-    normalize_session_name, ColorCounts, LobbyClientMsg, LobbyServerMsg, ServerBuildInfo,
-    SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, TapMode, UnlistedTable,
+    normalize_session_name, normalize_viewer_name, ColorCounts, LobbyClientMsg, LobbyServerMsg,
+    ServerBuildInfo, SessionClientMsg, SessionServerMsg, SessionSummary, TableEntry, TapMode,
+    UnlistedTable, HOST_ACTOR, MAX_VIEWER_NAME_CHARS,
 };
 
 /// Version of the structured event and command protocol shared by the
 /// server and the browser module. Bump it when either side must reject
 /// the other; it travels in `ws::ServerBuildInfo` so a stale cached
 /// frontend or WASM module is detected before messages fail to parse.
+/// Optional fields added with `#[serde(default)]` keep both sides
+/// compatible and need no bump.
 pub const PROTO_VERSION: u32 = 1;
+
+/// `skip_serializing_if` helper: leave a `false` flag out of the JSON, so
+/// an optional flag added later keeps older documents byte-identical.
+pub(crate) fn is_false(value: &bool) -> bool {
+    !*value
+}
 
 #[cfg(test)]
 mod tests {

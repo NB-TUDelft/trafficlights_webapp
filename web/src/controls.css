@@ -208,3 +208,37 @@ button.table-context-item[data-option="red"][aria-checked="true"] {
     transition-duration: 0ms;
   }
 }
+
+/* --- Viewer name prompt --- */
+.name-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(2 6 23 / 80%);
+}
+
+dialog.name-prompt {
+  position: static;
+  width: min(100%, 26rem);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.name-prompt-error {
+  margin: 0;
+  color: var(--red);
+}
+
+.viewer-name-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}

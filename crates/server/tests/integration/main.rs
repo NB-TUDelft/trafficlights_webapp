@@ -10,11 +10,15 @@
 //!   creator-only serial commands and unlisted tables, creator reconnects.
 //! - [`lifecycle`]: grace timeout, manual end, log retention, and graceful
 //!   shutdown (in process and through the real binary on `SIGTERM`).
-//! - [`http`]: `PUBLIC_ORIGIN` enforcement, malformed traffic, and the
-//!   creator-authorized `.jsonl` download with its full round trip.
+//! - [`http`]: `PUBLIC_ORIGIN` enforcement, malformed traffic, the
+//!   creator-authorized `.jsonl` download with its full round trip, and the
+//!   optional custom script in the page head.
+//! - [`names`]: sessions that collect viewer names: who is logged for each
+//!   change, unique names, and the reconnect takeover.
 
 mod http;
 mod lifecycle;
 mod lobby;
+mod names;
 mod roles;
 mod support;

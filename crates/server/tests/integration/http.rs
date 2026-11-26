@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The HTTP side: `PUBLIC_ORIGIN` enforcement before any upgrade, handling
-//! of malformed WebSocket traffic, and the creator-authorized statistics
-//! download, including a whole-class `.jsonl` round trip.
+//! of malformed WebSocket traffic, the creator-authorized statistics
+//! download, including a whole-class `.jsonl` round trip, and the optional
+//! custom script in the page head.
 
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
@@ -10,6 +11,7 @@ use trafficlights_proto::{
     TableRange, STATS_SCHEMA_VERSION,
 };
 use trafficlights_server::ws::MAX_MESSAGE_BYTES;
+use trafficlights_server::CustomScript;
 
 use crate::support::{
     assert_log_invariants, new_receiver_firmware, parse_log, unstamped, TestServer,
@@ -309,6 +311,7 @@ async fn the_statistics_log_round_trips_a_whole_class() {
         next,
         source,
         in_range,
+        actor: None,
     };
     let expected = vec![
         JsonlEvent::SessionStart {
@@ -318,6 +321,7 @@ async fn the_statistics_log_round_trips_a_whole_class() {
             session_id: session.id.clone(),
             name: "Studio 3B".to_string(),
             range: TableRange { start: 1, end: 5 },
+            collect_names: false,
         },
         JsonlEvent::ReceiverStatus {
             ts_ms: 0,
@@ -433,5 +437,54 @@ async fn websocket_upgrades_are_refused_past_max_connections() {
             .await
             .err(),
         Some(503)
+    );
+}
+
+#[tokio::test]
+async fn a_custom_script_joins_every_page_head_and_the_csp() {
+    let server = TestServer::start(|config| {
+        config.custom_script = Some(
+            CustomScript::parse("https://Scripts.Example.com/s.js?site=A&b=1")
+                .expect("a valid custom script"),
+        );
+    })
+    .await;
+    let element =
+        r#"<script src="https://Scripts.Example.com/s.js?site=A&amp;b=1" defer></script></head>"#;
+    let session = format!("/s/{}", uuid::Uuid::now_v7());
+    for path in ["/", "/index.html", "/new", session.as_str()] {
+        let (status, headers, body) = server.get(path, None).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert_eq!(body.matches(element).count(), 1, "{path}: {body}");
+        let csp = headers
+            .get(header::CONTENT_SECURITY_POLICY)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        for directive in [
+            "script-src 'self' 'wasm-unsafe-eval' https://scripts.example.com;",
+            "connect-src 'self' ws: wss: https://scripts.example.com;",
+            "img-src 'self' data: https://scripts.example.com;",
+            "style-src 'self' https://scripts.example.com;",
+            "frame-ancestors 'none'",
+        ] {
+            assert!(csp.contains(directive), "{path}: {csp}");
+        }
+    }
+
+    // Unset, the page and its policy stay as they were.
+    let plain = TestServer::start(|_| {}).await;
+    let (_, headers, body) = plain.get("/", None).await;
+    assert!(
+        !body.to_ascii_lowercase().contains("scripts.example.com"),
+        "{body}"
+    );
+    let csp = headers
+        .get(header::CONTENT_SECURITY_POLICY)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    assert!(
+        csp.contains("script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws: wss:;"),
+        "{csp}"
     );
 }

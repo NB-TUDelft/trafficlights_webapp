@@ -36,6 +36,8 @@ services:
       # Ephemeral by design (no volume): statistics are streamed to disk, not
       # held in RAM, and vanish with the container.
       LOG_DIR: ${LOG_DIR:-/tmp/trafficlights-logs}
+      # Optional custom script added to the page head (address only).
+      CUSTOM_SCRIPT_SRC: ${CUSTOM_SCRIPT_SRC:-}
       LOG: ${LOG:-info}
     read_only: true
     tmpfs:

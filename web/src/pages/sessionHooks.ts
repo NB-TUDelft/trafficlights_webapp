@@ -6,7 +6,7 @@ import { enteredAlert, playAlertBeep } from "@/lib/audio";
 import { ReconnectingSocket, type SocketStatus, websocketUrl } from "@/lib/socket";
 import { parseSessionServerMsg } from "@/protocol/parse-session";
 import type { SessionState } from "@/protocol/reducers";
-import { getCreatorToken } from "@/protocol/storage";
+import { getCreatorToken, getViewerKey, getViewerName } from "@/protocol/storage";
 import type { Color, SessionServerMsg } from "@/protocol/types";
 import { isValidTableRange, normalizeSessionName } from "@/protocol/types";
 import type { CreatorSerialBridge } from "@/serial/bridge";
@@ -47,6 +47,12 @@ export function useSessionSocket(args: SocketHookArgs): void {
           const token = getCreatorToken(sessionId);
           if (token !== null) {
             socket.send({ type: "auth", creator_token: token });
+            return;
+          }
+          // A name given in this session is sent again on every (re)connect.
+          const name = getViewerName(sessionId);
+          if (name !== null) {
+            socket.send({ type: "identify", name, key: getViewerKey() });
           }
         },
         onMessage: (data) => handleServerData(data, dispatch, bridgeRef, stopReconnectRef),
